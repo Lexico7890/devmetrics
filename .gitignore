@@ -1,0 +1,32 @@
+# Dependencias — se regeneran con npm install
+node_modules
+
+# Build outputs — se regeneran con npm run build
+dist
+.next
+.turbo
+
+# Variables de entorno — contienen secretos (tokens, passwords)
+.env
+.env.local
+.env.*.local
+
+# Prisma — el client se genera con prisma generate
+packages/database/node_modules/.prisma
+
+# Docker — los volúmenes de datos son locales
+postgres_data
+redis_data
+rabbitmq_data
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea

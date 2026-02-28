@@ -1,0 +1,22 @@
+{
+  "name": "@devmetrics/workers",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@devmetrics/shared": "*",
+    "@devmetrics/database": "*",
+    "bullmq": "^5.30.0",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "@devmetrics/tsconfig": "*",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

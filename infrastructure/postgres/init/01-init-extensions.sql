@@ -1,0 +1,1 @@
+-- Empty: Prisma manages all schemas and tables

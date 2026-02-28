@@ -1,0 +1,185 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  schemas  = ["auth", "analytics", "jobs"]
+}
+
+// ==========================================
+// AUTH SCHEMA — Authentication & Users
+// ==========================================
+
+model User {
+  id              String   @id @default(cuid())
+  githubId        Int      @unique @map("github_id")
+  username        String   @unique
+  email           String?
+  displayName     String?  @map("display_name")
+  avatarUrl       String?  @map("avatar_url")
+  accessToken     String   @map("access_token")
+  refreshToken    String?  @map("refresh_token")
+  tokenExpiresAt  DateTime? @map("token_expires_at")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  repositories    Repository[]
+  commits         Commit[]
+  pullRequests    PullRequest[]
+  dailyMetrics    DailyMetric[]
+
+  @@map("users")
+  @@schema("auth")
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  token       String   @unique
+  expiresAt   DateTime @map("expires_at")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+  @@schema("auth")
+}
+
+// ==========================================
+// ANALYTICS SCHEMA — Repos, Commits, PRs
+// ==========================================
+
+model Repository {
+  id              String   @id @default(cuid())
+  githubId        Int      @unique @map("github_id")
+  userId          String   @map("user_id")
+  name            String
+  fullName        String   @map("full_name")
+  description     String?
+  language        String?
+  isPrivate       Boolean  @default(false) @map("is_private")
+  isFork          Boolean  @default(false) @map("is_fork")
+  stargazersCount Int      @default(0) @map("stargazers_count")
+  forksCount      Int      @default(0) @map("forks_count")
+  defaultBranch   String   @default("main") @map("default_branch")
+  isActive        Boolean  @default(true) @map("is_active")
+  lastSyncedAt    DateTime? @map("last_synced_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commits         Commit[]
+  pullRequests    PullRequest[]
+
+  @@unique([userId, fullName])
+  @@index([userId, isActive])
+  @@map("repositories")
+  @@schema("analytics")
+}
+
+model Commit {
+  id            String   @id @default(cuid())
+  sha           String
+  repositoryId  String   @map("repository_id")
+  userId        String   @map("user_id")
+  message       String
+  additions     Int      @default(0)
+  deletions     Int      @default(0)
+  filesChanged  Int      @default(0) @map("files_changed")
+  committedAt   DateTime @map("committed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  repository    Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sha, repositoryId])
+  @@index([userId, committedAt(sort: Desc)])
+  @@index([repositoryId, committedAt(sort: Desc)])
+  @@map("commits")
+  @@schema("analytics")
+}
+
+model PullRequest {
+  id              String    @id @default(cuid())
+  githubId        Int       @map("github_id")
+  repositoryId    String    @map("repository_id")
+  userId          String    @map("user_id")
+  number          Int
+  title           String
+  state           String
+  isDraft         Boolean   @default(false) @map("is_draft")
+  additions       Int       @default(0)
+  deletions       Int       @default(0)
+  changedFiles    Int       @default(0) @map("changed_files")
+  commits         Int       @default(0)
+  comments        Int       @default(0)
+  reviewComments  Int       @default(0) @map("review_comments")
+  mergedAt        DateTime? @map("merged_at")
+  closedAt        DateTime? @map("closed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  repository      Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([githubId, repositoryId])
+  @@index([userId, state])
+  @@index([repositoryId, state])
+  @@index([createdAt(sort: Desc)])
+  @@map("pull_requests")
+  @@schema("analytics")
+}
+
+model DailyMetric {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  date            DateTime @db.Date
+  totalCommits    Int      @default(0) @map("total_commits")
+  totalAdditions  Int      @default(0) @map("total_additions")
+  totalDeletions  Int      @default(0) @map("total_deletions")
+  totalPrsMerged  Int      @default(0) @map("total_prs_merged")
+  totalPrsOpened  Int      @default(0) @map("total_prs_opened")
+  languages       Json     @default("{}") @db.JsonB
+  topRepos        Json     @default("[]") @map("top_repos") @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date(sort: Desc)])
+  @@map("daily_metrics")
+  @@schema("analytics")
+}
+
+// ==========================================
+// JOBS SCHEMA — Background job tracking
+// ==========================================
+
+model SyncJob {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  repositoryId  String?  @map("repository_id")
+  jobType       String   @map("job_type")
+  status        String   @default("pending")
+  priority      Int      @default(0)
+  payload       Json     @default("{}") @db.JsonB
+  result        Json?    @db.JsonB
+  errorMessage  String?  @map("error_message")
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(3) @map("max_attempts")
+  startedAt     DateTime? @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([status, priority(sort: Desc)])
+  @@index([userId, jobType])
+  @@map("sync_jobs")
+  @@schema("jobs")
+}
