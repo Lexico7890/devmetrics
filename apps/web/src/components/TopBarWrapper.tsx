@@ -1,0 +1,64 @@
+"use client";
+
+import React from 'react';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
+import { Search, Bell, ChevronRight } from 'lucide-react';
+
+const TopBarWrapper: React.FC = () => {
+  const pathname = usePathname();
+
+  const getBreadcrumb = () => {
+    if (pathname === '/') return 'Dashboard Overview';
+    if (pathname === '/analytics') return 'PR Analytics';
+    if (pathname === '/repositories') return 'Repositories';
+    if (pathname === '/onboarding') return 'Setup';
+    if (pathname === '/settings') return 'Settings';
+    if (pathname.startsWith('/repositories/')) return 'Repository Detail';
+    if (pathname === '/pr-list') return 'Pull Requests';
+    return 'Overview';
+  };
+
+  return (
+    <header className="h-16 border-b border-border-dark bg-background-dark/80 backdrop-blur-md sticky top-0 z-30 flex items-center justify-between px-8">
+      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+        <Link href="/" className="text-slate-500 cursor-pointer hover:text-white">DevMetrics</Link>
+        <ChevronRight className="w-3 h-3 text-slate-700" />
+        <span className="text-white">{getBreadcrumb()}</span>
+      </div>
+
+      <div className="flex items-center gap-6">
+        <div className="relative group">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-primary transition-colors" />
+          <input
+            type="text"
+            placeholder="Search projects or PRs..."
+            className="bg-card-dark border border-border-dark rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-300 focus:ring-1 focus:ring-primary w-64 transition-all outline-none"
+          />
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <button className="relative p-2 text-slate-400 hover:text-white transition-colors">
+            <Bell className="w-5 h-5" />
+            <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full border-2 border-background-dark"></span>
+          </button>
+          <div className="w-px h-6 bg-border-dark mx-2" />
+          <Link 
+            href="/settings"
+            className="flex items-center gap-2 p-1 pr-3 rounded-full hover:bg-white/5 transition-all border border-transparent hover:border-border-dark"
+          >
+            <img 
+              src="https://picsum.photos/seed/alex/100/100" 
+              className="w-7 h-7 rounded-full border border-primary/20" 
+              referrerPolicy="no-referrer"
+              alt="User"
+            />
+            <span className="text-xs font-bold text-slate-300">Alex</span>
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default TopBarWrapper;
