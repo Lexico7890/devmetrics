@@ -17,7 +17,10 @@
   },
   "devDependencies": {
     "@devmetrics/tsconfig": "*",
+    "@types/cookie-parser": "^1.4.10",
     "@types/node": "^25.3.2",
+    "@types/passport-github2": "^1.2.9",
+    "@types/passport-jwt": "^4.0.1",
     "prisma": "^6.6.0",
     "tsx": "^4.19.0"
   }

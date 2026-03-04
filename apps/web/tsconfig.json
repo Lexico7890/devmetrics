@@ -1,5 +1,5 @@
 {
-  "extends": "@devmetrics/tsconfig/nextjs.json", //../../packages/tsconfig/nextjs.json
+  "extends": "@devmetrics/tsconfig/nextjs.json", //../../packages/tsconfig/nextjs.json @devmetrics/tsconfig/nextjs.json
   "compilerOptions": {
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],

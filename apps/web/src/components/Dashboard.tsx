@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity */
 
 "use client";
 
@@ -20,7 +21,7 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { getAIPerformanceSummary } from '../services/modelServise';
+// import { getAIPerformanceSummary } from '../services/modelServise';
 
 const timelineData = [
   { name: 'Oct 01', main: 400, development: 240 },
@@ -40,7 +41,7 @@ const languageData = [
 const Dashboard: React.FC = () => {
   const [aiInsight, setAiInsight] = useState<string>('Analyzing repository trends...');
 
-  useEffect(() => {
+  /*useEffect(() => {
     const fetchInsight = async () => {
       const stats = {
         totalCommits: 1240,
@@ -52,7 +53,7 @@ const Dashboard: React.FC = () => {
       setAiInsight(summary || 'Insight unavailable.');
     };
     fetchInsight();
-  }, []);
+  }, []);*/
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">

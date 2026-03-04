@@ -17,6 +17,7 @@
     "docker:logs": "docker compose logs -f"
   },
   "devDependencies": {
+    "@types/node": "^25.3.3",
     "turbo": "^2.8.11"
   },
   "packageManager": "npm@10.8.0",
