@@ -1,7 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 
 export { PrismaClient } from "@prisma/client";
-export type * from "@prisma/client";
+// Elimina "export type *" y exporta los tipos que necesitas explícitamente
+export type { User, Session, Repository, Commit, PullRequest, DailyMetric, SyncJob } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

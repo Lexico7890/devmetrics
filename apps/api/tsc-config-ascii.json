@@ -1,0 +1,75 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "moduleDetection": "force",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "target": "es2023",
+        "lib": [
+            "es2022"
+        ],
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "outDir": "./dist",
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "allowSyntheticDefaultImports": true,
+        "incremental": true,
+        "resolvePackageJsonExports": true,
+        "types": [
+            "node"
+        ],
+        "removeComments": true,
+        "rootDir": "./src",
+        "baseUrl": "./",
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ]
+        },
+        "strictNullChecks": true,
+        "noImplicitAny": true,
+        "strictBindCallApply": true,
+        "noFallthroughCasesInSwitch": true,
+        "resolvePackageJsonImports": true,
+        "preserveConstEnums": true,
+        "useDefineForClassFields": true,
+        "noImplicitThis": true,
+        "strictFunctionTypes": true,
+        "strictPropertyInitialization": true,
+        "strictBuiltinIteratorReturn": true,
+        "alwaysStrict": true,
+        "useUnknownInCatchVariables": true
+    },
+    "files": [
+        "./src/app.controller.ts",
+        "./src/app.module.ts",
+        "./src/app.service.ts",
+        "./src/main.ts",
+        "./src/auth/auth.controller.ts",
+        "./src/auth/auth.guard.ts",
+        "./src/auth/auth.module.ts",
+        "./src/auth/auth.service.ts",
+        "./src/auth/strategies/github.strategy.ts",
+        "./src/auth/strategies/jwt.strategy.ts",
+        "./src/common/crypto.service.ts",
+        "./src/types/express.d.ts",
+        "./src/users/users.module.ts",
+        "./src/users/users.service.ts"
+    ],
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "test",
+        "dist",
+        "**/*spec.ts"
+    ]
+}

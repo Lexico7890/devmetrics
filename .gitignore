@@ -18,6 +18,7 @@ packages/database/node_modules/.prisma
 postgres_data
 redis_data
 rabbitmq_data
+*.tsbuildinfo
 
 # Logs
 *.log
