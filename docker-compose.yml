@@ -105,6 +105,15 @@ services:
       - SHADOW_DATABASE_URL=postgresql://devmetrics:devmetrics_secret@postgres:5432/devmetrics_shadow
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://devmetrics:devmetrics_secret@rabbitmq:5672/devmetrics
+      - GITHUB_CLIENT_ID=Ov23liTr0iV9Ee5YloBJ
+      - GITHUB_CLIENT_SECRET=ee59fc1631ad9a156365342e02a717692ed38bf8
+      - GITHUB_CALLBACK_URL=http://localhost/api/auth/github/callback
+      - JWT_ACCESS_SECRET=e88137b848574992283877484ff8007ef0a93b55a0863ec526c5b8c23d798ac4
+      - JWT_REFRESH_SECRET=68cbd5786e5bae7710a9d9a1e8690e3da753543bc6edb711daf8b95deef12d4c
+      - ENCRYPTION_KEY=5d9c1f8a2b3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a
+      - JWT_ACCESS_EXPIRES_IN=15m
+      - JWT_REFRESH_EXPIRES_IN=7d
+      - WEB_URL=http://localhost
     ports:
       - "4000:4000"
     volumes:
