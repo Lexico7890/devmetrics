@@ -55,8 +55,7 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(200)
   async refresh(@Req() req: Request, @Res() res: Response) {
-    const data: AuthResponse = req.cookies as AuthResponse;
-    const refreshToken = data?.refreshToken;
+    const refreshToken = req.cookies?.refresh_token;
     if (!refreshToken) {
       return res.status(401).json({ message: 'No refresh token' });
     }
@@ -78,8 +77,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(200)
   async logout(@Req() req: Request, @Res() res: Response) {
-    const data: AuthResponse = req.cookies as AuthResponse;
-    const refreshToken = data?.refreshToken;
+    const refreshToken = req.cookies?.refresh_token;
     if (refreshToken) {
       await this.authService.logout(refreshToken);
     }

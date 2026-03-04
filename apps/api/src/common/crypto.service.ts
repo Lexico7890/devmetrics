@@ -17,8 +17,6 @@ export class CryptoService {
   }
 
   encrypt(plaintext: string): string {
-    // GCM necesita un IV (initialization vector) único por cada encriptación
-    // Nunca reutilices el mismo IV con la misma key — por eso lo generamos aleatoriamente
     const iv = crypto.randomBytes(12); // 12 bytes es el estándar para GCM
     const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
 

@@ -6,7 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GithubStrategy } from './strategies/github.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { UsersModule } from '@/users/users.module';
+import { UsersModule } from '../users/users.module';
 import { JwtAuthGuard } from './auth.guard';
 
 @Module({
@@ -18,7 +18,7 @@ import { JwtAuthGuard } from './auth.guard';
     UsersModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, GithubStrategy, JwtStrategy],
+  providers: [AuthService, GithubStrategy, JwtStrategy, JwtAuthGuard],
   exports: [AuthService, JwtAuthGuard], // Exportamos para usarlos en otros módulos
 })
 export class AuthModule {}

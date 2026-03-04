@@ -4,9 +4,11 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Search, Bell, ChevronRight } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 const TopBarWrapper: React.FC = () => {
   const pathname = usePathname();
+  const { user } = useAuth();
 
   const getBreadcrumb = () => {
     if (pathname === '/') return 'Dashboard Overview';
@@ -47,13 +49,13 @@ const TopBarWrapper: React.FC = () => {
             href="/settings"
             className="flex items-center gap-2 p-1 pr-3 rounded-full hover:bg-white/5 transition-all border border-transparent hover:border-border-dark"
           >
-            <img 
-              src="https://picsum.photos/seed/alex/100/100" 
-              className="w-7 h-7 rounded-full border border-primary/20" 
+            <img
+              src={user?.avatarUrl ?? "https://picsum.photos/seed/user/100/100"}
+              className="w-7 h-7 rounded-full border border-primary/20"
               referrerPolicy="no-referrer"
               alt="User"
             />
-            <span className="text-xs font-bold text-slate-300">Alex</span>
+            <span className="text-xs font-bold text-slate-300">{user?.name ?? user?.login ?? "User"}</span>
           </Link>
         </div>
       </div>

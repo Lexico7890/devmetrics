@@ -3,17 +3,19 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  LayoutDashboard, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Settings,
   BarChart3,
   Rocket,
   List,
   Database
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 const SidebarWrapper: React.FC = () => {
   const pathname = usePathname();
+  const { user } = useAuth();
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/' },
@@ -78,14 +80,14 @@ const SidebarWrapper: React.FC = () => {
 
         <div className="flex items-center gap-3 px-3 py-3 bg-white/5 rounded-xl">
           <img
-            src="https://picsum.photos/seed/alex/100/100"
+            src={user?.avatarUrl ?? "https://picsum.photos/seed/user/100/100"}
             alt="User"
             className="w-8 h-8 rounded-full border border-primary/20"
             referrerPolicy="no-referrer"
           />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold truncate text-white">Alex Rivera</p>
-            <p className="text-[10px] text-slate-500 truncate">Pro Developer</p>
+            <p className="text-xs font-semibold truncate text-white">{user?.name ?? user?.login ?? "User"}</p>
+            <p className="text-[10px] text-slate-500 truncate">@{user?.login ?? ""}</p>
           </div>
         </div>
       </div>

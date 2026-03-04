@@ -46,7 +46,7 @@ model Session {
   ipAddress   String?  @map("ip_address")
   userAgent   String?  @map("user_agent")
   createdAt   DateTime @default(now()) @map("created_at")
-  refreshTokenHash String   @unique
+  refreshTokenHash String   @unique @map("refresh_token_hash")
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
