@@ -4,9 +4,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url       = env("DATABASE_URL")
-  schemas  = ["auth", "analytics", "jobs"]
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  schemas           = ["auth", "analytics", "jobs"]
 }
 
 // ==========================================
@@ -17,6 +17,7 @@ model User {
   id              String   @id @default(cuid())
   githubId        Int      @unique @map("github_id")
   username        String   @unique
+  login           String
   email           String?
   displayName     String?  @map("display_name")
   avatarUrl       String?  @map("avatar_url")
@@ -31,6 +32,7 @@ model User {
   commits         Commit[]
   pullRequests    PullRequest[]
   dailyMetrics    DailyMetric[]
+  sessions        Session[]
 
   @@map("users")
   @@schema("auth")
@@ -44,6 +46,8 @@ model Session {
   ipAddress   String?  @map("ip_address")
   userAgent   String?  @map("user_agent")
   createdAt   DateTime @default(now()) @map("created_at")
+  refreshTokenHash String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])

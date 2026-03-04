@@ -1,0 +1,52 @@
+// apps/api/src/common/crypto.service.ts
+import { Injectable } from '@nestjs/common';
+import * as crypto from 'crypto';
+
+@Injectable()
+export class CryptoService {
+  private readonly algorithm = 'aes-256-gcm';
+  // La key viene del env como hex string, la convertimos a Buffer
+  private readonly key: Buffer;
+
+  constructor() {
+    const hexKey = process.env.ENCRYPTION_KEY;
+    if (!hexKey || hexKey.length !== 64) {
+      throw new Error('ENCRYPTION_KEY must be a 32-byte hex string (64 chars)');
+    }
+    this.key = Buffer.from(hexKey, 'hex');
+  }
+
+  encrypt(plaintext: string): string {
+    // GCM necesita un IV (initialization vector) único por cada encriptación
+    // Nunca reutilices el mismo IV con la misma key — por eso lo generamos aleatoriamente
+    const iv = crypto.randomBytes(12); // 12 bytes es el estándar para GCM
+    const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
+
+    const encrypted = Buffer.concat([
+      cipher.update(plaintext, 'utf8'),
+      cipher.final(),
+    ]);
+
+    // El auth tag verifica que los datos no fueron modificados (autenticación)
+    const authTag = cipher.getAuthTag();
+
+    // Guardamos iv:authTag:encrypted juntos para poder desencriptar después
+    // Formato: hex(iv):hex(authTag):hex(encrypted)
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
+  }
+
+  decrypt(ciphertext: string): string {
+    const [ivHex, authTagHex, encryptedHex] = ciphertext.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+    const encrypted = Buffer.from(encryptedHex, 'hex');
+
+    const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
+    decipher.setAuthTag(authTag);
+
+    return Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]).toString('utf8');
+  }
+}

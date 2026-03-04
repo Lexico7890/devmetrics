@@ -1,4 +1,4 @@
-"use server";
+/*"use server";
 import { GoogleGenAI } from "@google/genai";
 
 // Always use the recommended initialization with named parameter and direct environment variable access.
@@ -20,4 +20,4 @@ export const getAIPerformanceSummary = async (stats: any) => {
     console.error("Gemini Error:", error);
     return "Unable to generate AI insights at this moment.";
   }
-};
+};*/
