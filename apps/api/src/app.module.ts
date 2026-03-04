@@ -1,26 +1,12 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { PrismaClient } from '@devmetrics/database';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    AuthModule, // ← debe estar aquí
-  ],
-  providers: [
-    {
-      provide: PrismaClient,
-      useFactory: () => {
-        return new PrismaClient({
-          log:
-            process.env.NODE_ENV === 'development'
-              ? ['query', 'error', 'warn']
-              : ['error'],
-        });
-      },
-    },
-  ],
-  exports: [PrismaClient],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), AuthModule],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}
