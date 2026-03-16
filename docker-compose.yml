@@ -1,4 +1,3 @@
-
 services:
   # ============================================
   # DATABASES & MESSAGE BROKERS
@@ -18,7 +17,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devmetrics -d devmetrics"]
+      test: [ "CMD-SHELL", "pg_isready -U devmetrics -d devmetrics" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,7 +35,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,11 +52,11 @@ services:
       RABBITMQ_DEFAULT_VHOST: devmetrics
     ports:
       - "5672:5672"
-      - "15672:15672"  # Management UI
+      - "15672:15672" # Management UI
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      test: [ "CMD", "rabbitmq-diagnostics", "check_running" ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -221,6 +220,8 @@ services:
         condition: service_healthy
     networks:
       - devmetrics-internal
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
 
   redis-commander:
     image: rediscommander/redis-commander:latest
@@ -245,6 +246,8 @@ volumes:
   redis_data:
     driver: local
   rabbitmq_data:
+    driver: local
+  pgadmin_data:
     driver: local
 
 networks:
