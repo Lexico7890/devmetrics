@@ -3,12 +3,16 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaClient } from '@devmetrics/database';
 import { Octokit } from 'octokit';
+import { CryptoService } from '../../common/crypto.service';
 
 @Processor('github-sync')
 export class SyncProcessor extends WorkerHost {
     private readonly logger = new Logger(SyncProcessor.name);
 
-    constructor(private prisma: PrismaClient) {
+    constructor(
+        private prisma: PrismaClient,
+        private crypto: CryptoService,
+    ) {
         super();
     }
 
@@ -34,8 +38,11 @@ export class SyncProcessor extends WorkerHost {
                 throw new Error('Usuario o Access Token no encontrado');
             }
 
+            // Desencriptamos el token
+            const decryptedToken = this.crypto.decrypt(user.accessToken);
+
             // 3. Inicializar GitHub API (Octokit)
-            const octokit = new Octokit({ auth: user.accessToken });
+            const octokit = new Octokit({ auth: decryptedToken });
 
             // 4. Lógica pesada: Obtener repositorios
             if (job.name === 'sync-user-repos') {

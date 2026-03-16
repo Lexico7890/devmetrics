@@ -13,6 +13,7 @@ async function bootstrap() {
         options: {
             urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
             queue: 'sync_queue',
+            noAck: false, // Habilita ACKs manuales
             queueOptions: { durable: true },
         },
     });
