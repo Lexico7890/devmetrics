@@ -1,0 +1,23 @@
+{
+  "name": "sync-service",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@devmetrics/database": "*",
+    "@devmetrics/shared": "*",
+    "@nestjs/bullmq": "^11.0.4",
+    "@nestjs/microservices": "^11.1.17",
+    "amqp-connection-manager": "^5.0.0",
+    "amqplib": "^0.10.9",
+    "bullmq": "^5.71.0",
+    "ioredis": "^5.10.0",
+    "octokit": "^5.0.5"
+  }
+}
