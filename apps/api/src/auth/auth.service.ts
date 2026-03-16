@@ -1,5 +1,6 @@
 // apps/api/src/auth/auth.service.ts
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient } from '@devmetrics/database';
 import { UsersService } from '../users/users.service';
@@ -17,6 +18,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaClient,
+    @Inject('RABBITMQ_CLIENT') private readonly rabbitClient: ClientProxy,
   ) {}
 
   // Llamado por la GitHub Strategy de Passport después del OAuth dance exitoso
@@ -30,6 +32,10 @@ export class AuthService {
     githubToken: string;
   }) {
     const user = await this.usersService.findOrCreate(profile);
+    
+    // Emitir el evento a RabbitMQ para que el sync-service inicie la sincronización
+    this.rabbitClient.emit('user.login_completed', { userId: user.id });
+
     return this.generateTokenPair(user.id, user.login);
   }
 
