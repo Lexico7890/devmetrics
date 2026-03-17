@@ -6,7 +6,6 @@ import { PrismaModule } from './common/prisma.module';
 @Module({
     imports: [
         PrismaModule,
-        // Configuración global de Redis para BullMQ
         BullModule.forRoot({
             connection: {
                 host: process.env.REDIS_HOST || 'localhost',
