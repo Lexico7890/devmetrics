@@ -13,7 +13,6 @@ export class SyncService {
     ) { }
 
     async enqueueInitialSync(userId: string) {
-        // 1. Crear el registro en tu tabla jobs.SyncJob
         const jobRecord = await this.prisma.syncJob.create({
             data: {
                 userId,
@@ -23,12 +22,11 @@ export class SyncService {
             },
         });
 
-        // 2. Encolar en BullMQ (Redis) pasándole el ID del SyncJob
         await this.syncQueue.add(
             'sync-user-repos',
             { syncJobId: jobRecord.id, userId },
             {
-                jobId: jobRecord.id, // Sincronizamos los IDs para trazabilidad
+                jobId: jobRecord.id,
                 attempts: jobRecord.maxAttempts
             }
         );
