@@ -23,33 +23,67 @@ export class WebhookController {
     ) {
         this.logger.log(`Recibido Webhook de GitHub - Evento: ${event} - ID: ${deliveryId}`);
 
-        // 1. Guardar el payload crudo en la base de datos (por seguridad y auditoría)
-        await this.prisma.webhookDelivery.create({
+        // Si GitHub envía la petición como form-urlencoded, el JSON vendrá como un string dentro de `payload`
+        let parsedPayload = payload;
+        if (payload && typeof payload.payload === 'string') {
+            try {
+                parsedPayload = JSON.parse(payload.payload);
+            } catch (e) {
+                this.logger.warn("El payload URL-encoded no pudo ser parseado a JSON");
+            }
+        }
+
+        // 1. Guardar el payload (parseado si aplica) en la base de datos
+        const deliveryData = await this.prisma.webhookDelivery.create({
             data: {
                 githubDeliveryId: deliveryId,
                 event: event,
-                action: payload.action || null,
-                payload: payload,
+                action: parsedPayload.action || null,
+                payload: parsedPayload,
                 status: 'received',
             },
         });
 
-        // 2. Dependiendo del evento, encolar un trabajo en BullMQ
-        if (event === 'push') {
-            // Si hacen un push, queremos procesar esos commits
-            await this.syncQueue.add('sync-commits', {
-                repositoryId: payload.repository.id,
-                commits: payload.commits,
-            }, {
-                priority: 1, // Prioridad alta para que se refleje rápido en el dashboard
-            });
-        } else if (event === 'pull_request') {
-            await this.syncQueue.add('sync-pr', {
-                repositoryId: payload.repository.id,
-                pullRequest: payload.pull_request,
-            });
-        }
+        try {
+            // 2. Dependiendo del evento, encolar un trabajo en BullMQ
+            if (event === 'push') {
+                if (!parsedPayload.repository?.id) throw new Error("Falta payload.repository.id");
 
-        return { message: 'Webhook encolado correctamente' };
+                await this.syncQueue.add('sync-commits', {
+                    repositoryId: parsedPayload.repository.id,
+                    commits: parsedPayload.commits,
+                }, {
+                    priority: 1,
+                });
+            } else if (event === 'pull_request') {
+                if (!parsedPayload.repository?.id) throw new Error("Falta payload.repository.id");
+
+                await this.syncQueue.add('sync-pr', {
+                    repositoryId: parsedPayload.repository.id,
+                    pullRequest: parsedPayload.pull_request,
+                });
+            }
+
+            // Marcar como procesado exitosamente
+            await this.prisma.webhookDelivery.update({
+                where: { id: deliveryData.id },
+                data: { status: 'processed' }
+            });
+
+            return { message: 'Webhook encolado correctamente' };
+        } catch (error) {
+            this.logger.error(`Error procesando webhook ${deliveryId}: ${error.message}`);
+            
+            // Si ocurre un error, actualizar la tabla con el mensaje de error para que no quede NULL
+            await this.prisma.webhookDelivery.update({
+                where: { id: deliveryData.id },
+                data: {
+                    status: 'failed',
+                    errorMessage: error.message
+                }
+            });
+
+            return { message: 'Error procesando webhook', error: error.message };
+        }
     }
 }
