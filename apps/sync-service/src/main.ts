@@ -3,7 +3,6 @@ import { AppModule } from './app.module';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 
 async function bootstrap() {
-    // Habilitamos rawBody: true para poder validar firmas de Webhooks
     const app = await NestFactory.create(AppModule, {
         rawBody: true,
     });
@@ -13,7 +12,7 @@ async function bootstrap() {
         options: {
             urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
             queue: 'sync_queue',
-            noAck: false, // Habilita ACKs manuales
+            noAck: false,
             queueOptions: { durable: true },
         },
     });
