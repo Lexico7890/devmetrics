@@ -21,39 +21,47 @@ import {
   Pie,
   Cell
 } from 'recharts';
-// import { getAIPerformanceSummary } from '../services/modelServise';
+import { useAuth } from '../context/AuthContext';
 
-const timelineData = [
-  { name: 'Oct 01', main: 400, development: 240 },
-  { name: 'Oct 07', main: 300, development: 139 },
-  { name: 'Oct 14', main: 900, development: 980 },
-  { name: 'Oct 21', main: 200, development: 390 },
-  { name: 'Oct 28', main: 1100, development: 480 },
-  { name: 'Nov 01', main: 500, development: 380 },
-];
-
-const languageData = [
-  { name: 'TypeScript', value: 75, color: '#3b82f6' },
-  { name: 'Rust', value: 15, color: '#6366f1' },
-  { name: 'Go', value: 10, color: '#a855f7' },
-];
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api";
 
 const Dashboard: React.FC = () => {
   const [aiInsight, setAiInsight] = useState<string>('Analyzing repository trends...');
+  const { accessToken } = useAuth();
+  
+  const [overviewData, setOverviewData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  /*useEffect(() => {
-    const fetchInsight = async () => {
-      const stats = {
-        totalCommits: 1240,
-        activeDays: 28,
-        mainLanguages: ['TypeScript', 'Rust'],
-        trend: 'positive'
-      };
-      const summary = await getAIPerformanceSummary(stats);
-      setAiInsight(summary || 'Insight unavailable.');
+  useEffect(() => {
+    const fetchOverview = async () => {
+      if (!accessToken) return;
+      try {
+        const res = await fetch(`${API_URL}/analytics/dashboard/overview`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setOverviewData(data);
+          setAiInsight(`Your repository activity shows a ${data.stats.totalCommits.trend} trend.`);
+        }
+      } catch (err) {
+        console.error('Error fetching analytics:', err);
+      } finally {
+        setIsLoading(false);
+      }
     };
-    fetchInsight();
-  }, []);*/
+    fetchOverview();
+  }, [accessToken]);
+
+  if (isLoading) {
+    return <div className="text-white p-8">Loading dashboard metrics...</div>;
+  }
+
+  if (!overviewData) {
+    return <div className="text-white p-8">No data available yet. Please complete a sync.</div>;
+  }
+
+  const { stats, timeline, languages } = overviewData;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -87,10 +95,10 @@ const Dashboard: React.FC = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard label="Total Commits" value="1,240" change="+12.5%" trend="up" subtext="+140 vs prev period" />
-        <KPICard label="PRs Merged" value="86" change="+8.2%" trend="up" subtext="Average 2.1/day" />
-        <KPICard label="Lines Changed" value="42.5k" change="-4.1%" trend="down" subtext="Net +12k additions" />
-        <KPICard label="Active Days" value="28" change="0%" trend="neutral" subtext="Out of last 30 days" />
+        <KPICard label="Total Commits" value={stats.totalCommits.value} change={stats.totalCommits.change} trend={stats.totalCommits.trend} subtext={stats.totalCommits.subtext} />
+        <KPICard label="PRs Merged" value={stats.prsMerged.value} change={stats.prsMerged.change} trend={stats.prsMerged.trend} subtext={stats.prsMerged.subtext} />
+        <KPICard label="Lines Changed" value={stats.linesChanged.value} change={stats.linesChanged.change} trend={stats.linesChanged.trend} subtext={stats.linesChanged.subtext} />
+        <KPICard label="Active Days" value={stats.activeDays.value} change={stats.activeDays.change} trend={stats.activeDays.trend} subtext={stats.activeDays.subtext} />
       </div>
 
       {/* Charts Row */}
@@ -108,7 +116,7 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={timelineData}>
+              <AreaChart data={timeline}>
                 <defs>
                   <linearGradient id="colorMain" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -135,7 +143,7 @@ const Dashboard: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={languageData}
+                  data={languages}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -143,7 +151,7 @@ const Dashboard: React.FC = () => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {languageData.map((entry, index) => (
+                  {languages.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -151,12 +159,12 @@ const Dashboard: React.FC = () => {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-2xl font-bold text-white">12</span>
+              <span className="text-2xl font-bold text-white">{languages.length}</span>
               <span className="text-[10px] uppercase text-slate-500 font-bold">Total Lng</span>
             </div>
           </div>
           <div className="mt-8 space-y-4">
-            {languageData.map(lang => (
+            {languages.map((lang: any) => (
               <div key={lang.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: lang.color }} />
