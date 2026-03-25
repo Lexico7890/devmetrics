@@ -36,8 +36,7 @@ export class SyncProcessor extends WorkerHost {
             }
         } catch (error) {
             this.logger.error(`Error en Job ${job.id} (${job.name}):`, error.message);
-            
-            // Mark syncJob as failed if it's a syncJob (has syncJobId)
+
             const syncJobId = job.data?.syncJobId;
             if (syncJobId) {
                 await this.prisma.syncJob.update({
@@ -55,7 +54,7 @@ export class SyncProcessor extends WorkerHost {
 
     private async handleSyncUserRepos(job: Job) {
         const { syncJobId, userId } = job.data;
-        
+
         await this.prisma.syncJob.update({
             where: { id: syncJobId },
             data: { status: 'processing', startedAt: new Date() },
@@ -81,6 +80,7 @@ export class SyncProcessor extends WorkerHost {
                     name: repo.name,
                     fullName: repo.full_name,
                     stargazersCount: repo.stargazers_count,
+                    language: repo.language,
                     updatedAt: new Date(),
                 },
                 create: {
@@ -91,10 +91,10 @@ export class SyncProcessor extends WorkerHost {
                     isPrivate: repo.private,
                     stargazersCount: repo.stargazers_count || 0,
                     defaultBranch: repo.default_branch,
+                    language: repo.language,
                 },
             });
 
-            // Enqueue commit sync for this specific repo
             const commitJobRecord = await this.prisma.syncJob.create({
                 data: {
                     userId,
@@ -126,7 +126,7 @@ export class SyncProcessor extends WorkerHost {
 
     private async handleSyncRepoCommits(job: Job) {
         const { syncJobId, userId, repositoryId, owner, repo } = job.data;
-        
+
         await this.prisma.syncJob.update({
             where: { id: syncJobId },
             data: { status: 'processing', startedAt: new Date() },
@@ -140,29 +140,49 @@ export class SyncProcessor extends WorkerHost {
 
         const { Octokit } = await eval('import("octokit")');
         const octokit = new Octokit({ auth: this.crypto.decrypt(user.accessToken) });
-        
-        // Fetch up to 100 commits for initial sync to avoid massive API limits
+
         const { data: commits } = await octokit.rest.repos.listCommits({
             owner,
             repo,
+            author: user.login,
             per_page: 100,
         });
 
         for (const commitData of commits) {
-            // Check if commit already exists
+            let additions = 0;
+            let deletions = 0;
+            let filesChanged = 0;
+
             const existing = await this.prisma.commit.findUnique({
-                where: {
-                    sha_repositoryId: { sha: commitData.sha, repositoryId }
-                }
+                where: { sha_repositoryId: { sha: commitData.sha, repositoryId } }
             });
 
             if (!existing) {
+                const isDetailLimited = await this.rateLimiter.isRateLimited(`gh-api-${userId}`, 4000, 3600000);
+                if (!isDetailLimited) {
+                    try {
+                        const { data: detail } = await octokit.rest.repos.getCommit({
+                            owner,
+                            repo,
+                            ref: commitData.sha
+                        });
+                        additions = detail.stats?.additions ?? 0;
+                        deletions = detail.stats?.deletions ?? 0;
+                        filesChanged = detail.files?.length ?? 0;
+                    } catch (e) {
+                        this.logger.warn(`Could not fetch details for historical commit ${commitData.sha}`);
+                    }
+                }
+
                 await this.prisma.commit.create({
                     data: {
                         sha: commitData.sha,
                         repositoryId,
                         userId,
                         message: commitData.commit.message,
+                        additions,
+                        deletions,
+                        filesChanged,
                         committedAt: new Date(commitData.commit.author.date || commitData.commit.committer.date || new Date()),
                     }
                 });
@@ -187,7 +207,8 @@ export class SyncProcessor extends WorkerHost {
 
         // repositoryId here is the github ID from the webhook payload!
         const repository = await this.prisma.repository.findUnique({
-            where: { githubId: githubRepoId }
+            where: { githubId: githubRepoId },
+            include: { user: true }
         });
 
         if (!repository) {
@@ -195,10 +216,41 @@ export class SyncProcessor extends WorkerHost {
             return { status: 'ignored' };
         }
 
+        let octokit;
+        if (repository.user?.accessToken) {
+            const isLimited = await this.rateLimiter.isRateLimited(`gh-api-${repository.userId}`, 4000, 3600000);
+            if (!isLimited) {
+                const { Octokit } = await eval('import("octokit")');
+                octokit = new Octokit({ auth: this.crypto.decrypt(repository.user.accessToken) });
+            }
+        }
+
+        const [owner, repoName] = repository.fullName.split('/');
+
         for (const commit of commits) {
-            const addedCnt = commit.added?.length ?? 0;
-            const removedCnt = commit.removed?.length ?? 0;
-            const modifiedCnt = commit.modified?.length ?? 0;
+            let additions = 0;
+            let deletions = 0;
+            let filesChanged = (commit.added?.length ?? 0) + (commit.removed?.length ?? 0) + (commit.modified?.length ?? 0);
+
+            if (octokit) {
+                const isDetailLimited = await this.rateLimiter.isRateLimited(`gh-api-${repository.userId}`, 4000, 3600000);
+                if (!isDetailLimited) {
+                    try {
+                        const { data: detail } = await octokit.rest.repos.getCommit({
+                            owner,
+                            repo: repoName,
+                            ref: commit.id
+                        });
+                        if (detail.stats) {
+                            additions = detail.stats.additions ?? 0;
+                            deletions = detail.stats.deletions ?? 0;
+                            filesChanged = detail.files?.length ?? filesChanged;
+                        }
+                    } catch (e) {
+                        this.logger.warn(`Could not fetch details for webhook commit ${commit.id}`);
+                    }
+                }
+            }
 
             await this.prisma.commit.upsert({
                 where: {
@@ -206,69 +258,73 @@ export class SyncProcessor extends WorkerHost {
                 },
                 update: {
                     message: commit.message,
+                    additions,
+                    deletions,
+                    filesChanged
                 },
                 create: {
                     sha: commit.id,
                     repositoryId: repository.id,
-                    userId: repository.userId, // El dueño del repo asume el commit inicial en el scope
+                    userId: repository.userId,
                     message: commit.message,
-                    filesChanged: addedCnt + removedCnt + modifiedCnt,
+                    additions,
+                    deletions,
+                    filesChanged,
                     committedAt: new Date(commit.timestamp),
                 }
             });
         }
         return { status: 'success' };
     }
-
     private async handleWebhookPR(job: Job) {
         const { repositoryId: githubRepoId, pullRequest } = job.data;
 
-        const repository = await this.prisma.repository.findUnique({
-            where: { githubId: githubRepoId }
-        });
+const repository = await this.prisma.repository.findUnique({
+    where: { githubId: githubRepoId }
+});
 
-        if (!repository) {
-            this.logger.warn(`Webhook PR omitido: Repositorio ${githubRepoId} no encontrado en DB.`);
-            return { status: 'ignored' };
-        }
+if (!repository) {
+    this.logger.warn(`Webhook PR omitido: Repositorio ${githubRepoId} no encontrado en DB.`);
+    return { status: 'ignored' };
+}
 
-        await this.prisma.pullRequest.upsert({
-            where: {
-                githubId_repositoryId: { githubId: pullRequest.id, repositoryId: repository.id }
-            },
-            update: {
-                title: pullRequest.title,
-                state: pullRequest.state,
-                isDraft: pullRequest.draft,
-                additions: pullRequest.additions,
-                deletions: pullRequest.deletions,
-                changedFiles: pullRequest.changed_files,
-                commits: pullRequest.commits,
-                comments: pullRequest.comments,
-                reviewComments: pullRequest.review_comments,
-                mergedAt: pullRequest.merged_at ? new Date(pullRequest.merged_at) : null,
-                closedAt: pullRequest.closed_at ? new Date(pullRequest.closed_at) : null,
-                updatedAt: new Date(),
-            },
-            create: {
-                githubId: pullRequest.id,
-                repositoryId: repository.id,
-                userId: repository.userId,
-                number: pullRequest.number,
-                title: pullRequest.title,
-                state: pullRequest.state,
-                isDraft: pullRequest.draft,
-                additions: pullRequest.additions || 0,
-                deletions: pullRequest.deletions || 0,
-                changedFiles: pullRequest.changed_files || 0,
-                commits: pullRequest.commits || 0,
-                comments: pullRequest.comments || 0,
-                reviewComments: pullRequest.review_comments || 0,
-                mergedAt: pullRequest.merged_at ? new Date(pullRequest.merged_at) : null,
-                closedAt: pullRequest.closed_at ? new Date(pullRequest.closed_at) : null,
-            }
-        });
+await this.prisma.pullRequest.upsert({
+    where: {
+        githubId_repositoryId: { githubId: pullRequest.id, repositoryId: repository.id }
+    },
+    update: {
+        title: pullRequest.title,
+        state: pullRequest.state,
+        isDraft: pullRequest.draft,
+        additions: pullRequest.additions,
+        deletions: pullRequest.deletions,
+        changedFiles: pullRequest.changed_files,
+        commits: pullRequest.commits,
+        comments: pullRequest.comments,
+        reviewComments: pullRequest.review_comments,
+        mergedAt: pullRequest.merged_at ? new Date(pullRequest.merged_at) : null,
+        closedAt: pullRequest.closed_at ? new Date(pullRequest.closed_at) : null,
+        updatedAt: new Date(),
+    },
+    create: {
+        githubId: pullRequest.id,
+        repositoryId: repository.id,
+        userId: repository.userId,
+        number: pullRequest.number,
+        title: pullRequest.title,
+        state: pullRequest.state,
+        isDraft: pullRequest.draft,
+        additions: pullRequest.additions || 0,
+        deletions: pullRequest.deletions || 0,
+        changedFiles: pullRequest.changed_files || 0,
+        commits: pullRequest.commits || 0,
+        comments: pullRequest.comments || 0,
+        reviewComments: pullRequest.review_comments || 0,
+        mergedAt: pullRequest.merged_at ? new Date(pullRequest.merged_at) : null,
+        closedAt: pullRequest.closed_at ? new Date(pullRequest.closed_at) : null,
+    }
+});
 
-        return { status: 'success' };
+return { status: 'success' };
     }
 }
