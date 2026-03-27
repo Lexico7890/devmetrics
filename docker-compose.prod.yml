@@ -46,7 +46,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: infrastructure/docker/api.dockerfile
+      dockerfile: api.Dockerfile
     container_name: devmetrics-api
     restart: unless-stopped
     env_file:
@@ -64,7 +64,7 @@ services:
   sync:
     build:
       context: .
-      dockerfile: infrastructure/docker/sync.dockerfile
+      dockerfile: sync.Dockerfile
     container_name: devmetrics-sync
     restart: unless-stopped
     env_file:
@@ -82,7 +82,7 @@ services:
   workers:
     build:
       context: .
-      dockerfile: infrastructure/docker/workers.dockerfile
+      dockerfile: workers.Dockerfile
     container_name: devmetrics-workers
     restart: unless-stopped
     env_file:
