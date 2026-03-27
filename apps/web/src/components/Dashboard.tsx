@@ -3,19 +3,19 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Download, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Download,
   Sparkles,
 } from 'lucide-react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -28,9 +28,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api";
 const Dashboard: React.FC = () => {
   const [aiInsight, setAiInsight] = useState<string>('Analyzing repository trends...');
   const { accessToken } = useAuth();
-  
+
   const [overviewData, setOverviewData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const isSyncingRef = React.useRef(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -51,6 +55,33 @@ const Dashboard: React.FC = () => {
       }
     };
     fetchOverview();
+  }, [accessToken, refreshKey]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const checkSyncStatus = async () => {
+      try {
+        const res = await fetch(`${API_URL}/analytics/sync-status`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setIsSyncing(data.isSyncing);
+
+          if (isSyncingRef.current && !data.isSyncing) {
+            setRefreshKey(prev => prev + 1);
+          }
+          isSyncingRef.current = data.isSyncing;
+        }
+      } catch (err) {
+        console.error('Error fetching sync status:', err);
+      }
+    };
+
+    checkSyncStatus();
+    const intervalId = setInterval(checkSyncStatus, 5000);
+    return () => clearInterval(intervalId);
   }, [accessToken]);
 
   if (isLoading) {
@@ -93,10 +124,27 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* ESTO ES NUEVO: Si 'isSyncing' es verdadero, pintamos una alerta súper 
+          llamativa para que el usuario sepa por qué sus números están en cero o bajos. */}
+      {isSyncing && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex gap-4 items-center animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+            <svg className="animate-spin w-5 h-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h3 className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-0.5">Sync in progress</h3>
+            <p className="text-sm text-slate-300">We are securely downloading your GitHub history in the background. Metrics will update automatically upon completion.</p>
+          </div>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard label="Total Commits" value={stats.totalCommits.value} change={stats.totalCommits.change} trend={stats.totalCommits.trend} subtext={stats.totalCommits.subtext} />
-        <KPICard label="PRs Merged" value={stats.prsMerged.value} change={stats.prsMerged.change} trend={stats.prsMerged.trend} subtext={stats.prsMerged.subtext} />
+        <KPICard label="PRs Activity" value={stats.prsActivity.value} change={stats.prsActivity.change} trend={stats.prsActivity.trend} subtext={stats.prsActivity.subtext} />
         <KPICard label="Lines Changed" value={stats.linesChanged.value} change={stats.linesChanged.change} trend={stats.linesChanged.trend} subtext={stats.linesChanged.subtext} />
         <KPICard label="Active Days" value={stats.activeDays.value} change={stats.activeDays.change} trend={stats.activeDays.trend} subtext={stats.activeDays.subtext} />
       </div>
@@ -110,8 +158,7 @@ const Dashboard: React.FC = () => {
               <p className="text-xs text-slate-500">Daily code contributions across branches</p>
             </div>
             <div className="flex gap-4">
-              <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-primary" /> <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Main</span></div>
-              <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-primary/30" /> <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Development</span></div>
+              <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-primary" /> <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Commits</span></div>
             </div>
           </div>
           <div className="h-64">
@@ -119,19 +166,18 @@ const Dashboard: React.FC = () => {
               <AreaChart data={timeline}>
                 <defs>
                   <linearGradient id="colorMain" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis dataKey="name" stroke="#52525b" fontSize={10} axisLine={false} tickLine={false} />
                 <YAxis hide />
-                <Tooltip 
+                <Tooltip
                   contentStyle={{ backgroundColor: '#161618', border: '1px solid #27272a', borderRadius: '8px' }}
                   itemStyle={{ fontSize: '12px' }}
                 />
-                <Area type="monotone" dataKey="main" stroke="#3b82f6" fillOpacity={1} fill="url(#colorMain)" strokeWidth={2} />
-                <Area type="monotone" dataKey="development" stroke="#3b82f640" fill="transparent" strokeWidth={2} strokeDasharray="5 5" />
+                <Area type="monotone" dataKey="commits" stroke="#3b82f6" fillOpacity={1} fill="url(#colorMain)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -177,34 +223,104 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Heatmap Simulation */}
+      {/* Heatmap Real Data */}
       <div className="bg-card-dark border border-border-dark rounded-xl p-6 shadow-sm">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-bold text-white">Activity Heatmap</h3>
           <div className="flex items-center gap-2 text-[10px] text-slate-500">
             <span>Less</span>
-            <div className="w-3 h-3 bg-primary/10 rounded-sm" />
-            <div className="w-3 h-3 bg-primary/30 rounded-sm" />
-            <div className="w-3 h-3 bg-primary/60 rounded-sm" />
+            <div className="w-3 h-3 bg-slate-800/50 rounded-sm" />
+            <div className="w-3 h-3 bg-primary/40 rounded-sm" />
+            <div className="w-3 h-3 bg-primary/70 rounded-sm" />
             <div className="w-3 h-3 bg-primary rounded-sm" />
             <span>More</span>
           </div>
         </div>
-        <div className="flex gap-1 overflow-x-auto pb-4 custom-scrollbar">
-          <div className="grid grid-rows-7 grid-flow-col gap-1.5">
-            {Array.from({ length: 364 }).map((_, i) => {
-              const opacity = [0.1, 0.3, 0.6, 1][Math.floor(Math.random() * 4)];
-              return (
-                <div 
-                  key={i} 
-                  className="w-3 h-3 rounded-sm bg-primary" 
-                  style={{ opacity }} 
-                  title={`${Math.floor(Math.random() * 10)} commits on this day`}
-                />
-              );
-            })}
-          </div>
-        </div>
+
+        {(() => {
+          if (!overviewData.heatmap || overviewData.heatmap.length === 0) return null;
+
+          const weeks: any[][] = [];
+          for (let i = 0; i < overviewData.heatmap.length; i += 7) {
+            weeks.push(overviewData.heatmap.slice(i, i + 7));
+          }
+
+          const monthLabels: { label: string, weekIndex: number }[] = [];
+
+          weeks.forEach((week, weekIndex) => {
+            const [y, m, d] = week[0].date.split('-');
+            const firstDay = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+            const month = firstDay.getMonth();
+
+            let isNewMonth = false;
+            if (weekIndex === 0) {
+              isNewMonth = true;
+            } else {
+              const [py, pm, pd] = weeks[weekIndex - 1][0].date.split('-');
+              const prevFirstDay = new Date(parseInt(py), parseInt(pm) - 1, parseInt(pd));
+              isNewMonth = month !== prevFirstDay.getMonth();
+            }
+
+            if (isNewMonth) {
+              monthLabels.push({
+                label: firstDay.toLocaleString('en-US', { month: 'short' }),
+                weekIndex
+              });
+            }
+          });
+
+          const cleanMonthLabels = [];
+          for (let i = 0; i < monthLabels.length; i++) {
+            if (i < monthLabels.length - 1 && (monthLabels[i + 1].weekIndex - monthLabels[i].weekIndex) < 3) {
+              continue;
+            }
+            cleanMonthLabels.push(monthLabels[i]);
+          }
+
+          return (
+            <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
+              <div className="min-w-max relative pt-6">
+
+                {/* Labels de los Meses */}
+                <div className="absolute top-0 left-0 flex text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  {cleanMonthLabels.map(({ label, weekIndex }) => (
+                    <span
+                      key={`${label}-${weekIndex}`}
+                      className="absolute"
+                      style={{ left: `${weekIndex * 18}px` }}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Grilla de Contribuciones */}
+                <div className="grid grid-rows-7 grid-flow-col gap-[6px]">
+                  {overviewData.heatmap.map((day: any) => {
+                    let rectClass = "w-3 h-3 rounded-[2px] transition-colors hover:border hover:border-white/50 ";
+                    if (day.count === 0) {
+                      rectClass += "bg-slate-800/40";
+                    } else if (day.count < 3) {
+                      rectClass += "bg-primary/40";
+                    } else if (day.count < 6) {
+                      rectClass += "bg-primary/70";
+                    } else {
+                      rectClass += "bg-primary";
+                    }
+
+                    return (
+                      <div
+                        key={day.date}
+                        className={rectClass}
+                        title={`${day.count} commits on ${day.date}`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -216,9 +332,8 @@ const KPICard: React.FC<{ label: string; value: string; change: string; trend: '
   <div className="bg-card-dark border border-border-dark p-5 rounded-xl shadow-sm hover:border-primary/30 transition-all group">
     <div className="flex justify-between items-start mb-4">
       <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
-      <span className={`text-xs font-bold flex items-center gap-0.5 ${
-        trend === 'up' ? 'text-emerald-500' : trend === 'down' ? 'text-rose-500' : 'text-slate-500'
-      }`}>
+      <span className={`text-xs font-bold flex items-center gap-0.5 ${trend === 'up' ? 'text-emerald-500' : trend === 'down' ? 'text-rose-500' : 'text-slate-500'
+        }`}>
         {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : trend === 'down' ? <TrendingDown className="w-3 h-3" /> : null}
         {change}
       </span>
@@ -230,10 +345,10 @@ const KPICard: React.FC<{ label: string; value: string; change: string; trend: '
       </div>
       <div className="w-16 h-8 flex items-end gap-1 pb-1">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div 
-            key={i} 
-            className="w-1.5 bg-primary/20 rounded-t-sm group-hover:bg-primary/40 transition-all" 
-            style={{ height: `${Math.random() * 100}%` }} 
+          <div
+            key={i}
+            className="w-1.5 bg-primary/20 rounded-t-sm group-hover:bg-primary/40 transition-all"
+            style={{ height: `${Math.random() * 100}%` }}
           />
         ))}
       </div>

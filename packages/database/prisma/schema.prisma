@@ -111,7 +111,7 @@ model Commit {
 
 model PullRequest {
   id             String    @id @default(cuid())
-  githubId       Int       @map("github_id")
+  githubId       BigInt    @map("github_id")
   repositoryId   String    @map("repository_id")
   userId         String    @map("user_id")
   number         Int
