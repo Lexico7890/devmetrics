@@ -34,7 +34,6 @@ Thumbs.db
 apps/notebooks/ml_experiments/.ipynb_checkpoints/
 apps/notebooks/ml_experiments/*.pkl
 apps/notebooks/ml_experiments/*.csv
-apps/notebooks/ml_experiments/*.ipynb
 apps/notebooks/ml_experiments/*.py
 apps/notebooks/ml_experiments/*.png
 apps/notebooks/ml_experiments/*.joblib
