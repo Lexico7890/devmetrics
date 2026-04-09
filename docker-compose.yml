@@ -186,6 +186,16 @@ services:
     networks:
       - devmetrics-internal
 
+  jupyter:
+    image: jupyter/datascience-notebook:latest
+    command: start-notebook.sh --NotebookApp.token=''
+    volumes:
+      - ${PWD}:/workspace
+    ports:
+      - "8888:8888"
+    networks:
+      - devmetrics-internal
+
   # ============================================
   # REVERSE PROXY
   # ============================================
