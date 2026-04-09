@@ -189,6 +189,59 @@ export class SyncProcessor extends WorkerHost {
             }
         }
 
+        // --- Fetch Historical Pull Requests ---
+        const { data: prs } = await octokit.rest.pulls.list({
+            owner,
+            repo,
+            state: 'all',
+            per_page: 100,
+        });
+
+        for (const pr of prs) {
+            const existingPR = await this.prisma.pullRequest.findUnique({
+                where: { githubId_repositoryId: { githubId: pr.id, repositoryId } }
+            });
+
+            if (!existingPR) {
+                let fullPr = pr as any;
+                const isDetailLimited = await this.rateLimiter.isRateLimited(`gh-api-${userId}`, 4000, 3600000);
+                if (!isDetailLimited) {
+                    try {
+                        const { data: detail } = await octokit.rest.pulls.get({
+                            owner,
+                            repo,
+                            pull_number: pr.number
+                        });
+                        fullPr = detail;
+                    } catch (e) {
+                        this.logger.warn(`Could not fetch details for historical PR ${pr.number}`);
+                    }
+                }
+
+                await this.prisma.pullRequest.create({
+                    data: {
+                        githubId: fullPr.id,
+                        repositoryId,
+                        userId,
+                        number: fullPr.number,
+                        title: fullPr.title,
+                        state: fullPr.state,
+                        isDraft: fullPr.draft ?? false,
+                        additions: fullPr.additions || 0,
+                        deletions: fullPr.deletions || 0,
+                        changedFiles: fullPr.changed_files || 0,
+                        commits: fullPr.commits || 0,
+                        comments: fullPr.comments || 0,
+                        reviewComments: fullPr.review_comments || 0,
+                        mergedAt: fullPr.merged_at ? new Date(fullPr.merged_at) : null,
+                        closedAt: fullPr.closed_at ? new Date(fullPr.closed_at) : null,
+                        createdAt: fullPr.created_at ? new Date(fullPr.created_at) : new Date(),
+                    }
+                });
+            }
+        }
+        // -------------------------------------
+
         await this.prisma.syncJob.update({
             where: { id: syncJobId },
             data: { status: 'completed', completedAt: new Date() },
