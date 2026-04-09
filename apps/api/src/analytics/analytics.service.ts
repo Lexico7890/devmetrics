@@ -139,6 +139,52 @@ export class AnalyticsService {
       }
     }
 
+    // --- POPULAR DAILY_METRICS IMPLÍCITAMENTE ---
+    const totalPrsMerged = await this.prisma.pullRequest.count({
+      where: { userId, state: 'closed', mergedAt: { not: null } }
+    });
+
+    const totalPrsOpened = await this.prisma.pullRequest.count({
+      where: { userId, state: 'open' }
+    });
+
+    const topReposData = await this.prisma.repository.findMany({
+      where: { userId },
+      orderBy: { stargazersCount: 'desc' },
+      take: 3,
+      select: { name: true, stargazersCount: true }
+    });
+
+    await this.prisma.dailyMetric.upsert({
+      where: {
+        userId_date: {
+          userId,
+          date: startOfDay(today)
+        }
+      },
+      update: {
+        totalCommits: commitsCurrentPeriod,
+        totalAdditions: changesAgg._sum.additions || 0,
+        totalDeletions: changesAgg._sum.deletions || 0,
+        totalPrsMerged,
+        totalPrsOpened,
+        languages: JSON.stringify(languages.length > 0 ? languages : [{ name: 'Unknown', value: 100, color: '#52525b' }]),
+        topRepos: JSON.stringify(topReposData)
+      },
+      create: {
+        userId,
+        date: startOfDay(today),
+        totalCommits: commitsCurrentPeriod,
+        totalAdditions: changesAgg._sum.additions || 0,
+        totalDeletions: changesAgg._sum.deletions || 0,
+        totalPrsMerged,
+        totalPrsOpened,
+        languages: JSON.stringify(languages.length > 0 ? languages : [{ name: 'Unknown', value: 100, color: '#52525b' }]),
+        topRepos: JSON.stringify(topReposData)
+      }
+    });
+    // ---------------------------------------------
+
     return {
       stats: {
         totalCommits: {
