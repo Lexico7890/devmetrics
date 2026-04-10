@@ -15,8 +15,11 @@ RUN npm install
 COPY packages/ ./packages/
 COPY apps/sync-service/ ./apps/sync-service/
 
-# Generate Prisma client
+# 3. Generar cliente de Prisma
 RUN cd packages/database && npx prisma generate
 
-EXPOSE 4002
-CMD ["npm", "run", "dev", "--workspace=@devmetrics/sync-service"]
+# 4. CONSTRUIR LA APLICACIÓN
+RUN npm run build --workspace=@devmetrics/sync-service
+
+# 5. EJECUTAR EN MODO PRODUCCIÓN
+CMD ["npm", "run", "start:prod", "--workspace=@devmetrics/sync-service"]

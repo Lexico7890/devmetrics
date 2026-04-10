@@ -95,6 +95,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/api.Dockerfile
     container_name: devmetrics-api
+    command: npm run dev --workspace=@devmetrics/api
     restart: unless-stopped
     environment:
       - NODE_ENV=development

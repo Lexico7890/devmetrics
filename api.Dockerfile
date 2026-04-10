@@ -15,8 +15,13 @@ RUN npm install
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 
-# Generate Prisma client
+# 3. Generar cliente de Prisma
 RUN cd packages/database && npx prisma generate
 
+# 4. CONSTRUIR LA APLICACIÓN
+RUN npm run build --workspace=@devmetrics/api
+
 EXPOSE 4000
-CMD ["npm", "run", "dev", "--workspace=@devmetrics/api"]
+
+# 5. EJECUTAR EN MODO PRODUCCIÓN
+CMD ["npm", "run", "start:prod", "--workspace=@devmetrics/api"]
