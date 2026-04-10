@@ -2,24 +2,19 @@ FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies
-COPY package.json package-lock.json* turbo.json ./
-COPY apps/sync-service/package.json ./apps/sync-service/
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/database/package.json ./packages/database/
-COPY packages/tsconfig/ ./packages/tsconfig/
+# 1. Copiar todo el código (tu archivo .dockerignore evitará que se suba la basura)
+COPY . .
 
+# 2. Instalar dependencias completas
 RUN npm install
-
-# Copy source
-COPY packages/ ./packages/
-COPY apps/sync-service/ ./apps/sync-service/
 
 # 3. Generar cliente de Prisma
 RUN cd packages/database && npx prisma generate
 
-# 4. CONSTRUIR LA APLICACIÓN
-RUN npm run build --workspace=@devmetrics/sync-service
+# 4. CONSTRUIR CON TURBOREPO
+RUN npx turbo run build --filter=@devmetrics/sync-service
 
-# 5. EJECUTAR EN MODO PRODUCCIÓN
+EXPOSE 4002
+
+# 5. Ejecutar en producción
 CMD ["npm", "run", "start:prod", "--workspace=@devmetrics/sync-service"]
