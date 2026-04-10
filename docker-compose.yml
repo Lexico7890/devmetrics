@@ -75,7 +75,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost/api
+      - NEXT_PUBLIC_API_URL=http://44.198.175.55:4000/api
       - DATABASE_URL=postgresql://devmetrics:devmetrics_secret@postgres:5432/devmetrics?schema=auth
     ports:
       - "3000:3000"
