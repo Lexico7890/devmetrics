@@ -37,3 +37,5 @@ apps/notebooks/ml_experiments/*.csv
 apps/notebooks/ml_experiments/*.py
 apps/notebooks/ml_experiments/*.png
 apps/notebooks/ml_experiments/*.joblib
+
+devmetrics-key.pem

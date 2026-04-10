@@ -12,7 +12,7 @@ RUN npm install
 RUN cd packages/database && npx prisma generate
 
 # 4. CONSTRUIR CON TURBOREPO
-RUN npx turbo run build --filter=@devmetrics/sync-service
+RUN npx turbo run build --filter=@devmetrics/sync-service...
 
 EXPOSE 4002
 

@@ -12,7 +12,7 @@ RUN npm install
 RUN cd packages/database && npx prisma generate
 
 # 4. CONSTRUIR CON TURBOREPO
-RUN npx turbo run build --filter=@devmetrics/api
+RUN npx turbo run build --filter=@devmetrics/api...
 
 EXPOSE 4000
 
