@@ -23,7 +23,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api";
+const API_URL = "/api"
 
 const Dashboard: React.FC = () => {
   const [aiInsight, setAiInsight] = useState<string>('Analyzing repository trends...');
