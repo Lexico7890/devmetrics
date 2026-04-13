@@ -23,7 +23,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api";
+const API_URL = "http://44.198.175.55:4000";
 
 // Public routes that don't require authentication
 const PUBLIC_ROUTES = ["/auth/callback", "/auth/login"];
