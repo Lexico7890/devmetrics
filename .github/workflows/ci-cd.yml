@@ -1,0 +1,72 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # ==========================================
+  # 1. CI: Integración Continua (Pruebas y Build)
+  # ==========================================
+  ci:
+    name: Build & Lint (CI)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: cd packages/database && npx prisma generate
+
+      - name: Build Monorepo (Turborepo)
+        run: npx turbo run build
+
+  # ==========================================
+  # 2. CD: Despliegue Continuo a AWS
+  # ==========================================
+  cd:
+    name: Deploy to AWS (CD)
+    runs-on: ubuntu-latest
+    needs: ci  # Este job SOLO corre si 'ci' termina exitosamente
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Solo despliega si es un push a main
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          script: |
+            # Ir a la carpeta del proyecto
+            cd ~/devmetrics
+            
+            # 1. Bajar el código más reciente que acaba de pasar el CI
+            git fetch --all
+            git reset --hard origin/main
+            git pull origin main
+            
+            # 2. Apagar los contenedores actuales (Clean state - 0 downtime no requerido)
+            docker compose -f docker-compose.prod.yml down
+            
+            # 3. Construir y levantar todo nuevamente (en background)
+            docker compose -f docker-compose.prod.yml up -d --build
+            
+            # 4. Sincronizar Prisma (asegurarnos de que la BD tiene las columnas correctas)
+            echo "Waiting for containers to initialize before DB push..."
+            sleep 10
+            docker exec -i devmetrics-sync sh -c "cd packages/database && npx prisma db push"
