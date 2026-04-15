@@ -6,22 +6,22 @@ import { subDays, startOfDay, endOfDay, format } from 'date-fns';
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
 
-  constructor(private readonly prisma: PrismaClient) { }
+  constructor(private readonly prisma: PrismaClient) {}
 
   async getSyncStatus(userId: string) {
     const activeJob = await this.prisma.syncJob.findFirst({
       where: {
         userId,
         status: {
-          in: ['pending', 'active']
-        }
+          in: ['pending', 'active'],
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
     return {
       isSyncing: !!activeJob,
-      jobType: activeJob?.jobType || null
+      jobType: activeJob?.jobType || null,
     };
   }
 
@@ -31,44 +31,52 @@ export class AnalyticsService {
     const sixtyDaysAgo = subDays(today, 60);
 
     const commitsCurrentPeriod = await this.prisma.commit.count({
-      where: { userId, committedAt: { gte: thirtyDaysAgo } }
+      where: { userId, committedAt: { gte: thirtyDaysAgo } },
     });
 
     const commitsPreviousPeriod = await this.prisma.commit.count({
-      where: { userId, committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } }
+      where: { userId, committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
     });
 
-    const commitChangePercent = commitsPreviousPeriod === 0
-      ? 100
-      : ((commitsCurrentPeriod - commitsPreviousPeriod) / commitsPreviousPeriod) * 100;
+    const commitChangePercent =
+      commitsPreviousPeriod === 0
+        ? 100
+        : ((commitsCurrentPeriod - commitsPreviousPeriod) /
+            commitsPreviousPeriod) *
+          100;
 
     const prsCurrentPeriod = await this.prisma.pullRequest.count({
-      where: { userId, createdAt: { gte: thirtyDaysAgo } }
+      where: { userId, createdAt: { gte: thirtyDaysAgo } },
     });
 
     const prsPreviousPeriod = await this.prisma.pullRequest.count({
-      where: { userId, createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } }
+      where: { userId, createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
     });
 
-    const prChangePercent = prsPreviousPeriod === 0
-      ? 100
-      : ((prsCurrentPeriod - prsPreviousPeriod) / prsPreviousPeriod) * 100;
+    const prChangePercent =
+      prsPreviousPeriod === 0
+        ? 100
+        : ((prsCurrentPeriod - prsPreviousPeriod) / prsPreviousPeriod) * 100;
 
     const changesAgg = await this.prisma.commit.aggregate({
       where: { userId, committedAt: { gte: thirtyDaysAgo } },
-      _sum: { additions: true, deletions: true }
+      _sum: { additions: true, deletions: true },
     });
     const changesPrevAgg = await this.prisma.commit.aggregate({
       where: { userId, committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
-      _sum: { additions: true, deletions: true }
+      _sum: { additions: true, deletions: true },
     });
 
-    const totalLinesCurrent = (changesAgg._sum.additions || 0) + (changesAgg._sum.deletions || 0);
-    const totalLinesPrev = (changesPrevAgg._sum.additions || 0) + (changesPrevAgg._sum.deletions || 0);
+    const totalLinesCurrent =
+      (changesAgg._sum.additions || 0) + (changesAgg._sum.deletions || 0);
+    const totalLinesPrev =
+      (changesPrevAgg._sum.additions || 0) +
+      (changesPrevAgg._sum.deletions || 0);
 
-    const linesChangePercent = totalLinesPrev === 0
-      ? 100
-      : ((totalLinesCurrent - totalLinesPrev) / totalLinesPrev) * 100;
+    const linesChangePercent =
+      totalLinesPrev === 0
+        ? 100
+        : ((totalLinesCurrent - totalLinesPrev) / totalLinesPrev) * 100;
 
     const commitsTimeline = [];
     for (let i = 29; i >= 0; i--) {
@@ -80,26 +88,28 @@ export class AnalyticsService {
         where: {
           userId,
           committedAt: { gte: start, lte: end },
-        }
+        },
       });
 
       commitsTimeline.push({
         name: format(date, 'MMM dd'),
-        commits: countMain
+        commits: countMain,
       });
     }
 
     const commitsForActive = await this.prisma.commit.findMany({
       where: { userId, committedAt: { gte: thirtyDaysAgo } },
-      select: { committedAt: true }
+      select: { committedAt: true },
     });
 
-    const uniqueDays = new Set(commitsForActive.map(c => format(c.committedAt, 'yyyy-MM-dd')));
+    const uniqueDays = new Set(
+      commitsForActive.map((c) => format(c.committedAt, 'yyyy-MM-dd')),
+    );
     const activeDaysCount = uniqueDays.size;
 
     const userRepos = await this.prisma.repository.findMany({
       where: { userId },
-      select: { language: true }
+      select: { language: true },
     });
 
     const langCounts: Record<string, number> = {};
@@ -111,18 +121,21 @@ export class AnalyticsService {
       }
     }
 
-    const languages = Object.entries(langCounts).map(([name, count]) => {
-      return {
-        name,
-        value: Math.round((count / totalReposWithLang) * 100),
-        color: this.getColorForLanguage(name),
-      };
-    }).sort((a, b) => b.value - a.value).slice(0, 5); // top 5
+    const languages = Object.entries(langCounts)
+      .map(([name, count]) => {
+        return {
+          name,
+          value: Math.round((count / totalReposWithLang) * 100),
+          color: this.getColorForLanguage(name),
+        };
+      })
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5); // top 5
 
     const oneYearAgo = subDays(today, 364);
     const commitsForHeatmap = await this.prisma.commit.findMany({
       where: { userId, committedAt: { gte: oneYearAgo } },
-      select: { committedAt: true }
+      select: { committedAt: true },
     });
 
     const heatmapData = Array.from({ length: 364 }).map((_, i) => {
@@ -130,37 +143,37 @@ export class AnalyticsService {
       return { date: format(d, 'yyyy-MM-dd'), count: 0 };
     });
 
-    const heatmapMap = new Map(heatmapData.map(d => [d.date, d]));
+    const heatmapMap = new Map(heatmapData.map((d) => [d.date, d]));
 
     for (const c of commitsForHeatmap) {
       const dateStr = format(c.committedAt, 'yyyy-MM-dd');
       if (heatmapMap.has(dateStr)) {
-        heatmapMap.get(dateStr)!.count++;
+        heatmapMap.get(dateStr).count++;
       }
     }
 
     // --- POPULAR DAILY_METRICS IMPLÍCITAMENTE ---
     const totalPrsMerged = await this.prisma.pullRequest.count({
-      where: { userId, state: 'closed', mergedAt: { not: null } }
+      where: { userId, state: 'closed', mergedAt: { not: null } },
     });
 
     const totalPrsOpened = await this.prisma.pullRequest.count({
-      where: { userId, state: 'open' }
+      where: { userId, state: 'open' },
     });
 
     const topReposData = await this.prisma.repository.findMany({
       where: { userId },
       orderBy: { stargazersCount: 'desc' },
       take: 3,
-      select: { name: true, stargazersCount: true }
+      select: { name: true, stargazersCount: true },
     });
 
     await this.prisma.dailyMetric.upsert({
       where: {
         userId_date: {
           userId,
-          date: startOfDay(today)
-        }
+          date: startOfDay(today),
+        },
       },
       update: {
         totalCommits: commitsCurrentPeriod,
@@ -168,8 +181,12 @@ export class AnalyticsService {
         totalDeletions: changesAgg._sum.deletions || 0,
         totalPrsMerged,
         totalPrsOpened,
-        languages: JSON.stringify(languages.length > 0 ? languages : [{ name: 'Unknown', value: 100, color: '#52525b' }]),
-        topRepos: JSON.stringify(topReposData)
+        languages: JSON.stringify(
+          languages.length > 0
+            ? languages
+            : [{ name: 'Unknown', value: 100, color: '#52525b' }],
+        ),
+        topRepos: JSON.stringify(topReposData),
       },
       create: {
         userId,
@@ -179,9 +196,13 @@ export class AnalyticsService {
         totalDeletions: changesAgg._sum.deletions || 0,
         totalPrsMerged,
         totalPrsOpened,
-        languages: JSON.stringify(languages.length > 0 ? languages : [{ name: 'Unknown', value: 100, color: '#52525b' }]),
-        topRepos: JSON.stringify(topReposData)
-      }
+        languages: JSON.stringify(
+          languages.length > 0
+            ? languages
+            : [{ name: 'Unknown', value: 100, color: '#52525b' }],
+        ),
+        topRepos: JSON.stringify(topReposData),
+      },
     });
     // ---------------------------------------------
 
@@ -191,31 +212,166 @@ export class AnalyticsService {
           value: commitsCurrentPeriod,
           change: `${commitChangePercent > 0 ? '+' : ''}${commitChangePercent.toFixed(1)}%`,
           trend: commitChangePercent >= 0 ? 'up' : 'down',
-          subtext: `${commitsCurrentPeriod - commitsPreviousPeriod > 0 ? '+' : ''}${commitsCurrentPeriod - commitsPreviousPeriod} vs prev period`
+          subtext: `${commitsCurrentPeriod - commitsPreviousPeriod > 0 ? '+' : ''}${commitsCurrentPeriod - commitsPreviousPeriod} vs prev period`,
         },
         prsActivity: {
           value: prsCurrentPeriod,
           change: `${prChangePercent > 0 ? '+' : ''}${prChangePercent.toFixed(1)}%`,
           trend: prChangePercent >= 0 ? 'up' : 'down',
-          subtext: `Average ${(prsCurrentPeriod / 30).toFixed(1)}/day`
+          subtext: `Average ${(prsCurrentPeriod / 30).toFixed(1)}/day`,
         },
         linesChanged: {
-          value: totalLinesCurrent >= 1000 ? `${(totalLinesCurrent / 1000).toFixed(1)}k` : totalLinesCurrent.toString(),
+          value:
+            totalLinesCurrent >= 1000
+              ? `${(totalLinesCurrent / 1000).toFixed(1)}k`
+              : totalLinesCurrent.toString(),
           change: `${linesChangePercent > 0 ? '+' : ''}${linesChangePercent.toFixed(1)}%`,
           trend: linesChangePercent >= 0 ? 'up' : 'down',
-          subtext: `Net ${(changesAgg._sum.additions || 0) >= 1000 ? `+${((changesAgg._sum.additions || 0) / 1000).toFixed(1)}k` : `+${changesAgg._sum.additions || 0}`} additions`
+          subtext: `Net ${(changesAgg._sum.additions || 0) >= 1000 ? `+${((changesAgg._sum.additions || 0) / 1000).toFixed(1)}k` : `+${changesAgg._sum.additions || 0}`} additions`,
         },
         activeDays: {
           value: activeDaysCount,
           change: `${Math.round((activeDaysCount / 30) * 100)}%`,
           trend: 'neutral',
-          subtext: 'Out of last 30 days'
-        }
+          subtext: 'Out of last 30 days',
+        },
       },
       timeline: commitsTimeline,
-      languages: languages.length > 0 ? languages : [{ name: 'Unknown', value: 100, color: '#52525b' }],
-      heatmap: heatmapData
+      languages:
+        languages.length > 0
+          ? languages
+          : [{ name: 'Unknown', value: 100, color: '#52525b' }],
+      heatmap: heatmapData,
     };
+  }
+
+  async getPullRequests(
+    userId: string,
+    options: {
+      cursor?: string;
+      limit?: number;
+      state?: string;
+    },
+  ) {
+    const { cursor, limit = 10, state } = options;
+
+    const where: any = { userId };
+    if (state && state !== 'All') {
+      where.state = state.toLowerCase();
+    }
+
+    const [prs, total] = await Promise.all([
+      this.prisma.pullRequest.findMany({
+        where,
+        take: limit + 1,
+        ...(cursor && { skip: 1, cursor: { id: cursor } }),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          repository: {
+            select: { name: true, fullName: true },
+          },
+          user: {
+            select: { username: true, login: true, avatarUrl: true },
+          },
+        },
+      }),
+      this.prisma.pullRequest.count({ where }),
+    ]);
+
+    const hasNextPage = prs.length > limit;
+    const items = hasNextPage ? prs.slice(0, -1) : prs;
+    const nextCursor = hasNextPage ? items[items.length - 1]?.id : undefined;
+
+    const formattedPRs = items.map((pr) => {
+      const additions = pr.additions || 0;
+      const deletions = pr.deletions || 0;
+      const totalChanges = additions + deletions;
+
+      let size: 'XS' | 'S' | 'M' | 'L' = 'S';
+      if (totalChanges > 100) size = 'M';
+      if (totalChanges > 500) size = 'L';
+      if (totalChanges < 10) size = 'XS';
+
+      const timeToMerge =
+        pr.mergedAt && pr.createdAt
+          ? this.calculateTimeToMerge(pr.createdAt, pr.mergedAt)
+          : null;
+
+      return {
+        id: pr.number,
+        githubId: pr.githubId.toString(),
+        title: pr.title,
+        repo: pr.repository.name,
+        repoFullName: pr.repository.fullName,
+        author: pr.user.username || pr.user.login,
+        authorImg: pr.user.avatarUrl,
+        status: this.formatPrStatus(pr.state, pr.isDraft, !!pr.mergedAt),
+        size,
+        additions,
+        deletions,
+        time: this.formatTimeAgo(pr.createdAt),
+        reviews: pr.reviewComments,
+        mergeTime: timeToMerge,
+        createdAt: pr.createdAt,
+        mergedAt: pr.mergedAt,
+        isDraft: pr.isDraft,
+      };
+    });
+
+    return {
+      items: formattedPRs,
+      meta: {
+        total,
+        limit,
+        hasNextPage,
+        hasPrevPage: !!cursor,
+        nextCursor,
+        startCount: cursor ? undefined : 1,
+        endCount: Math.min(limit, items.length),
+      },
+    };
+  }
+
+  private formatPrStatus(
+    state: string,
+    isDraft: boolean,
+    isMerged: boolean,
+  ): string {
+    if (isMerged) return 'Merged';
+    if (isDraft) return 'Draft';
+    if (state === 'open') return 'Open';
+    if (state === 'closed') return 'Closed';
+    return state;
+  }
+
+  private calculateTimeToMerge(createdAt: Date, mergedAt: Date): string {
+    const diffMs = mergedAt.getTime() - createdAt.getTime();
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours >= 24) {
+      const days = Math.floor(hours / 24);
+      const remainingHours = hours % 24;
+      return `${days}d ${remainingHours}h`;
+    }
+    if (hours > 0) {
+      return `${hours}.${Math.floor(minutes / 6)}h`;
+    }
+    return `${minutes}m`;
+  }
+
+  private formatTimeAgo(date: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    return `${Math.floor(diffDays / 30)}mo ago`;
   }
 
   private getColorForLanguage(lang: string): string {
