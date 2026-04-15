@@ -14,6 +14,7 @@ import {
   ChevronsLeft,
   ChevronsRight
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface PR {
   id: number;
@@ -48,6 +49,7 @@ interface PRResponse {
 }
 
 const PRList: React.FC = () => {
+  const { accessToken } = useAuth();
   const [filter, setFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [prs, setPrs] = useState<PR[]>([]);
@@ -56,6 +58,7 @@ const PRList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchPRs = useCallback(async (cursor?: string) => {
+    if (!accessToken) return;
     setLoading(true);
     setError(null);
     
@@ -66,7 +69,9 @@ const PRList: React.FC = () => {
       if (filter !== 'All') params.set('state', filter);
       
       const response = await fetch(`/api/analytics/pull-requests?${params.toString()}`, {
-        credentials: 'include'
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
       });
       
       if (!response.ok) {
@@ -84,8 +89,10 @@ const PRList: React.FC = () => {
   }, [filter]);
 
   useEffect(() => {
-    fetchPRs();
-  }, [fetchPRs]);
+    if (accessToken) {
+      fetchPRs();
+    }
+  }, [fetchPRs, accessToken]);
 
   const handlePageChange = (direction: 'next' | 'prev' | 'first') => {
     if (!meta) return;
