@@ -60,13 +60,17 @@ jobs:
             git reset --hard origin/main
             git pull origin main
             
-            # 2. Apagar los contenedores actuales (Clean state - 0 downtime no requerido)
+            # 2. Limpiar imágenes colgadas y caché de build para liberar espacio antes de bajar/subir
+            docker builder prune -a -f
+            docker image prune -f
+
+            # 3. Apagar los contenedores actuales
             docker compose -f docker-compose.prod.yml down
             
-            # 3. Construir y levantar todo nuevamente (en background)
+            # 4. Construir y levantar todo nuevamente (en background)
             docker compose -f docker-compose.prod.yml up -d --build
             
-            # 4. Sincronizar Prisma (asegurarnos de que la BD tiene las columnas correctas)
+            # 5. Sincronizar Prisma (asegurarnos de que la BD tiene las columnas correctas)
             echo "Waiting for containers to initialize before DB push..."
             sleep 10
             docker exec -i devmetrics-sync sh -c "cd packages/database && npx prisma db push"
