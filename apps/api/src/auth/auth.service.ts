@@ -32,7 +32,7 @@ export class AuthService {
     githubToken: string;
   }) {
     const user = await this.usersService.findOrCreate(profile);
-    
+
     // Emitir el evento a RabbitMQ para que el sync-service inicie la sincronización
     this.rabbitClient.emit('user.login_completed', { userId: user.id });
 
