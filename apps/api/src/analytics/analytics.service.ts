@@ -26,6 +26,20 @@ export class AnalyticsService {
   }
 
   async getDashboardOverview(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { personalBests: true },
+    });
+    if (!user) throw new Error('User not found');
+    
+    let personalBests = typeof user.personalBests === 'string' 
+      ? JSON.parse(user.personalBests) 
+      : (user.personalBests as Record<string, number> || { commits: 0, prs: 0, lines: 0, activeDays: 0 });
+    
+    if (!personalBests.commits && !personalBests.prs) {
+      personalBests = await this.seedHistoricalPersonalBests(userId);
+    }
+
     const today = new Date();
     const thirtyDaysAgo = subDays(today, 30);
     const sixtyDaysAgo = subDays(today, 60);
@@ -106,6 +120,19 @@ export class AnalyticsService {
       commitsForActive.map((c) => format(c.committedAt, 'yyyy-MM-dd')),
     );
     const activeDaysCount = uniqueDays.size;
+
+    let pbUpdated = false;
+    if (commitsCurrentPeriod > (personalBests.commits || 0)) { personalBests.commits = commitsCurrentPeriod; pbUpdated = true; }
+    if (prsCurrentPeriod > (personalBests.prs || 0)) { personalBests.prs = prsCurrentPeriod; pbUpdated = true; }
+    if (totalLinesCurrent > (personalBests.lines || 0)) { personalBests.lines = totalLinesCurrent; pbUpdated = true; }
+    if (activeDaysCount > (personalBests.activeDays || 0)) { personalBests.activeDays = activeDaysCount; pbUpdated = true; }
+
+    if (pbUpdated) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { personalBests },
+      });
+    }
 
     const userRepos = await this.prisma.repository.findMany({
       where: { userId },
@@ -213,12 +240,14 @@ export class AnalyticsService {
           change: `${commitChangePercent > 0 ? '+' : ''}${commitChangePercent.toFixed(1)}%`,
           trend: commitChangePercent >= 0 ? 'up' : 'down',
           subtext: `${commitsCurrentPeriod - commitsPreviousPeriod > 0 ? '+' : ''}${commitsCurrentPeriod - commitsPreviousPeriod} vs prev period`,
+          personalBest: personalBests.commits || 0,
         },
         prsActivity: {
           value: prsCurrentPeriod,
           change: `${prChangePercent > 0 ? '+' : ''}${prChangePercent.toFixed(1)}%`,
           trend: prChangePercent >= 0 ? 'up' : 'down',
           subtext: `Average ${(prsCurrentPeriod / 30).toFixed(1)}/day`,
+          personalBest: personalBests.prs || 0,
         },
         linesChanged: {
           value:
@@ -227,13 +256,15 @@ export class AnalyticsService {
               : totalLinesCurrent.toString(),
           change: `${linesChangePercent > 0 ? '+' : ''}${linesChangePercent.toFixed(1)}%`,
           trend: linesChangePercent >= 0 ? 'up' : 'down',
-          subtext: `Net ${(changesAgg._sum.additions || 0) >= 1000 ? `+${((changesAgg._sum.additions || 0) / 1000).toFixed(1)}k` : `+${changesAgg._sum.additions || 0}`} additions`,
+          subtext: `+${(changesAgg._sum.additions || 0) >= 1000 ? ((changesAgg._sum.additions || 0) / 1000).toFixed(1) + 'k' : (changesAgg._sum.additions || 0)} lines added`,
+          personalBest: personalBests.lines || 0,
         },
         activeDays: {
           value: activeDaysCount,
           change: `${Math.round((activeDaysCount / 30) * 100)}%`,
           trend: 'neutral',
           subtext: 'Out of last 30 days',
+          personalBest: personalBests.activeDays || 0,
         },
       },
       timeline: commitsTimeline,
@@ -415,5 +446,81 @@ export class AnalyticsService {
       VisualBasic: '#945db7',
     };
     return colors[lang] || '#a1a1aa';
+  }
+
+  private async seedHistoricalPersonalBests(userId: string): Promise<Record<string, number>> {
+    const allCommits = await this.prisma.commit.findMany({
+      where: { userId },
+      select: { committedAt: true, additions: true, deletions: true },
+      orderBy: { committedAt: 'asc' },
+    });
+
+    let maxCommits = 0;
+    let maxLines = 0;
+    let maxActiveDays = 0;
+
+    let left = 0;
+    let currentLines = 0;
+    let leftDays = 0;
+    const dayCounts = new Map<string, number>();
+
+    const WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+    for (let right = 0; right < allCommits.length; right++) {
+      currentLines += allCommits[right].additions + allCommits[right].deletions;
+      const rightDate = format(allCommits[right].committedAt, 'yyyy-MM-dd');
+      dayCounts.set(rightDate, (dayCounts.get(rightDate) || 0) + 1);
+
+      while (allCommits[right].committedAt.getTime() - allCommits[left].committedAt.getTime() > WINDOW_MS) {
+        currentLines -= allCommits[left].additions + allCommits[left].deletions;
+        left++;
+      }
+      
+      while (allCommits[right].committedAt.getTime() - allCommits[leftDays].committedAt.getTime() > WINDOW_MS) {
+        const leftDate = format(allCommits[leftDays].committedAt, 'yyyy-MM-dd');
+        const count = dayCounts.get(leftDate);
+        if (count === 1) {
+          dayCounts.delete(leftDate);
+        } else if (count && count > 1) {
+          dayCounts.set(leftDate, count - 1);
+        }
+        leftDays++;
+      }
+
+      const currentCommits = right - left + 1;
+      if (currentCommits > maxCommits) maxCommits = currentCommits;
+      if (currentLines > maxLines) maxLines = currentLines;
+      if (dayCounts.size > maxActiveDays) maxActiveDays = dayCounts.size;
+    }
+
+    const allPrs = await this.prisma.pullRequest.findMany({
+      where: { userId },
+      select: { createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    let maxPrs = 0;
+    let leftPr = 0;
+    for (let right = 0; right < allPrs.length; right++) {
+      while (allPrs[right].createdAt.getTime() - allPrs[leftPr].createdAt.getTime() > WINDOW_MS) {
+        leftPr++;
+      }
+      const currentPrs = right - leftPr + 1;
+      if (currentPrs > maxPrs) maxPrs = currentPrs;
+    }
+
+    const pb = {
+      commits: maxCommits,
+      prs: maxPrs,
+      lines: maxLines,
+      activeDays: maxActiveDays,
+    };
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { personalBests: pb },
+    });
+    
+    return pb;
   }
 }

@@ -28,6 +28,8 @@ model User {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
+  personalBests  Json      @default("{\"commits\":0,\"prs\":0,\"lines\":0,\"activeDays\":0}") @map("personal_bests") @db.JsonB
+
   repositories Repository[]
   commits      Commit[]
   pullRequests PullRequest[]

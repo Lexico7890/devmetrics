@@ -8,6 +8,7 @@ import {
   TrendingDown,
   Download,
   Sparkles,
+  Trophy,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -143,10 +144,10 @@ const Dashboard: React.FC = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard label="Total Commits" value={stats.totalCommits.value} change={stats.totalCommits.change} trend={stats.totalCommits.trend} subtext={stats.totalCommits.subtext} />
-        <KPICard label="PRs Activity" value={stats.prsActivity.value} change={stats.prsActivity.change} trend={stats.prsActivity.trend} subtext={stats.prsActivity.subtext} />
-        <KPICard label="Lines Changed" value={stats.linesChanged.value} change={stats.linesChanged.change} trend={stats.linesChanged.trend} subtext={stats.linesChanged.subtext} />
-        <KPICard label="Active Days" value={stats.activeDays.value} change={stats.activeDays.change} trend={stats.activeDays.trend} subtext={stats.activeDays.subtext} />
+        <KPICard label="Total Commits" value={stats.totalCommits.value} change={stats.totalCommits.change} trend={stats.totalCommits.trend} subtext={stats.totalCommits.subtext} personalBest={stats.totalCommits.personalBest} />
+        <KPICard label="PRs Activity" value={stats.prsActivity.value} change={stats.prsActivity.change} trend={stats.prsActivity.trend} subtext={stats.prsActivity.subtext} personalBest={stats.prsActivity.personalBest} />
+        <KPICard label="Lines Changed" value={stats.linesChanged.value} change={stats.linesChanged.change} trend={stats.linesChanged.trend} subtext={stats.linesChanged.subtext} personalBest={stats.linesChanged.personalBest} />
+        <KPICard label="Active Days" value={stats.activeDays.value} change={stats.activeDays.change} trend={stats.activeDays.trend} subtext={stats.activeDays.subtext} personalBest={stats.activeDays.personalBest} />
       </div>
 
       {/* Charts Row */}
@@ -326,34 +327,45 @@ const Dashboard: React.FC = () => {
   );
 };
 
-const KPICard: React.FC<{ label: string; value: string; change: string; trend: 'up' | 'down' | 'neutral'; subtext: string }> = ({
-  label, value, change, trend, subtext
-}) => (
-  <div className="bg-card-dark border border-border-dark p-5 rounded-xl shadow-sm hover:border-primary/30 transition-all group">
-    <div className="flex justify-between items-start mb-4">
-      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
-      <span className={`text-xs font-bold flex items-center gap-0.5 ${trend === 'up' ? 'text-emerald-500' : trend === 'down' ? 'text-rose-500' : 'text-slate-500'
-        }`}>
-        {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : trend === 'down' ? <TrendingDown className="w-3 h-3" /> : null}
-        {change}
-      </span>
-    </div>
-    <div className="flex items-end justify-between">
-      <div>
-        <h3 className="text-3xl font-bold text-white group-hover:text-primary transition-colors">{value}</h3>
-        <p className="text-xs text-slate-500 mt-1">{subtext}</p>
+const KPICard: React.FC<{ label: string; value: string | number; change: string; trend: 'up' | 'down' | 'neutral'; subtext: string; personalBest?: number }> = ({
+  label, value, change, trend, subtext, personalBest
+}) => {
+  const formatPb = (pb: number) => pb >= 1000 ? `${(pb / 1000).toFixed(1)}k` : pb.toString();
+
+  return (
+    <div className="bg-card-dark border border-border-dark p-5 rounded-xl shadow-sm hover:border-primary/30 transition-all group">
+      <div className="flex justify-between items-start mb-4">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
+        <span className={`text-xs font-bold flex items-center gap-0.5 ${trend === 'up' ? 'text-emerald-500' : trend === 'down' ? 'text-rose-500' : 'text-slate-500'
+          }`}>
+          {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : trend === 'down' ? <TrendingDown className="w-3 h-3" /> : null}
+          {change}
+        </span>
       </div>
-      <div className="w-16 h-8 flex items-end gap-1 pb-1">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div
-            key={i}
-            className="w-1.5 bg-primary/20 rounded-t-sm group-hover:bg-primary/40 transition-all"
-            style={{ height: `${Math.random() * 100}%` }}
-          />
-        ))}
+      <div className="flex items-end justify-between">
+        <div>
+          <h3 className="text-3xl font-bold text-white group-hover:text-primary transition-colors">{value}</h3>
+          <p className="text-xs text-slate-500 mt-1">{subtext}</p>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          {personalBest !== undefined && personalBest > 0 && (
+            <div className="flex items-center gap-1 text-[10px] uppercase font-bold text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded-md" title="All-time 30-day Personal Best">
+              <Trophy className="w-3 h-3" /> PB: {formatPb(personalBest)}
+            </div>
+          )}
+          <div className="w-16 h-8 flex items-end gap-1 pb-1">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="w-1.5 bg-primary/20 rounded-t-sm group-hover:bg-primary/40 transition-all"
+                style={{ height: `${Math.random() * 100}%` }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default Dashboard;
