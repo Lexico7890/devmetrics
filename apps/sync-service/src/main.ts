@@ -18,7 +18,7 @@ async function bootstrap() {
     });
 
     await app.startAllMicroservices();
-    await app.listen(process.env.PORT || 4002);
+    await app.listen(process.env.PORT || 4002, '0.0.0.0');
 
     console.log(`🚀 Sync Service corriendo en puerto ${process.env.PORT || 4002}`);
 }
