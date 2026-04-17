@@ -14,7 +14,8 @@
     "db:migrate": "turbo db:migrate",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f"
+    "docker:logs": "docker compose logs -f",
+    "test": "turbo run test"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
