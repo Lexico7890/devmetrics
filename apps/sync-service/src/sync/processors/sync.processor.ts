@@ -198,6 +198,11 @@ export class SyncProcessor extends WorkerHost {
         });
 
         for (const pr of prs) {
+            // Only sync PRs where the author belongs to the user being synced
+            if (pr.user?.login !== user.login) {
+                continue;
+            }
+
             const existingPR = await this.prisma.pullRequest.findUnique({
                 where: { githubId_repositoryId: { githubId: pr.id, repositoryId } }
             });
@@ -333,12 +338,19 @@ export class SyncProcessor extends WorkerHost {
         const { repositoryId: githubRepoId, pullRequest } = job.data;
 
 const repository = await this.prisma.repository.findUnique({
-    where: { githubId: githubRepoId }
+    where: { githubId: githubRepoId },
+    include: { user: true }
 });
 
 if (!repository) {
     this.logger.warn(`Webhook PR omitido: Repositorio ${githubRepoId} no encontrado en DB.`);
     return { status: 'ignored' };
+}
+
+// Only allow PRs if the author login matches the local user login
+if (pullRequest.user?.login !== repository.user?.login) {
+    this.logger.log(`Webhook PR omitido: Autor ${pullRequest.user?.login} no coincide con el usuario del dashboard (${repository.user?.login}).`);
+    return { status: 'skipped_not_author' };
 }
 
 await this.prisma.pullRequest.upsert({

@@ -44,12 +44,24 @@ export class AnalyticsService {
     const thirtyDaysAgo = subDays(today, 30);
     const sixtyDaysAgo = subDays(today, 60);
 
+    const commitFilter = {
+      userId,
+      message: {
+        not: {
+          startsWith: 'Merge ',
+        },
+      },
+    };
+
     const commitsCurrentPeriod = await this.prisma.commit.count({
-      where: { userId, committedAt: { gte: thirtyDaysAgo } },
+      where: { ...commitFilter, committedAt: { gte: thirtyDaysAgo } },
     });
 
     const commitsPreviousPeriod = await this.prisma.commit.count({
-      where: { userId, committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
+      where: {
+        ...commitFilter,
+        committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
+      },
     });
 
     const commitChangePercent =
@@ -73,11 +85,14 @@ export class AnalyticsService {
         : ((prsCurrentPeriod - prsPreviousPeriod) / prsPreviousPeriod) * 100;
 
     const changesAgg = await this.prisma.commit.aggregate({
-      where: { userId, committedAt: { gte: thirtyDaysAgo } },
+      where: { ...commitFilter, committedAt: { gte: thirtyDaysAgo } },
       _sum: { additions: true, deletions: true },
     });
     const changesPrevAgg = await this.prisma.commit.aggregate({
-      where: { userId, committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
+      where: {
+        ...commitFilter,
+        committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
+      },
       _sum: { additions: true, deletions: true },
     });
 
@@ -100,7 +115,7 @@ export class AnalyticsService {
 
       const countMain = await this.prisma.commit.count({
         where: {
-          userId,
+          ...commitFilter,
           committedAt: { gte: start, lte: end },
         },
       });
@@ -112,7 +127,7 @@ export class AnalyticsService {
     }
 
     const commitsForActive = await this.prisma.commit.findMany({
-      where: { userId, committedAt: { gte: thirtyDaysAgo } },
+      where: { ...commitFilter, committedAt: { gte: thirtyDaysAgo } },
       select: { committedAt: true },
     });
 
@@ -161,7 +176,7 @@ export class AnalyticsService {
 
     const oneYearAgo = subDays(today, 364);
     const commitsForHeatmap = await this.prisma.commit.findMany({
-      where: { userId, committedAt: { gte: oneYearAgo } },
+      where: { ...commitFilter, committedAt: { gte: oneYearAgo } },
       select: { committedAt: true },
     });
 
@@ -450,7 +465,14 @@ export class AnalyticsService {
 
   private async seedHistoricalPersonalBests(userId: string): Promise<Record<string, number>> {
     const allCommits = await this.prisma.commit.findMany({
-      where: { userId },
+      where: { 
+        userId, 
+        message: {
+          not: {
+            startsWith: 'Merge ',
+          },
+        },
+      },
       select: { committedAt: true, additions: true, deletions: true },
       orderBy: { committedAt: 'asc' },
     });
