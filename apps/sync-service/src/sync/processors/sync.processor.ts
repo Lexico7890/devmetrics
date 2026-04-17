@@ -75,7 +75,7 @@ export class SyncProcessor extends WorkerHost {
 
         for (const repo of repos) {
             const savedRepo = await this.prisma.repository.upsert({
-                where: { githubId: repo.id },
+                where: { userId_githubId: { userId: user.id, githubId: repo.id } },
                 update: {
                     name: repo.name,
                     fullName: repo.full_name,
@@ -199,7 +199,7 @@ export class SyncProcessor extends WorkerHost {
 
         for (const pr of prs) {
             // Only sync PRs where the author belongs to the user being synced
-            if (pr.user?.login !== user.login) {
+            if (pr.user?.login?.toLowerCase() !== user.login.toLowerCase()) {
                 continue;
             }
 
@@ -264,132 +264,138 @@ export class SyncProcessor extends WorkerHost {
         const { repositoryId: githubRepoId, commits } = job.data;
 
         // repositoryId here is the github ID from the webhook payload!
-        const repository = await this.prisma.repository.findUnique({
+        const repositories = await this.prisma.repository.findMany({
             where: { githubId: githubRepoId },
             include: { user: true }
         });
 
-        if (!repository) {
-            this.logger.warn(`Webhook Commit omitido: Repositorio ${githubRepoId} no encontrado en DB.`);
+        if (repositories.length === 0) {
+            this.logger.warn(`Webhook Commit omitido: Repositorio ${githubRepoId} no encontrado en DB para ningún usuario.`);
             return { status: 'ignored' };
         }
 
-        let octokit;
-        if (repository.user?.accessToken) {
-            const isLimited = await this.rateLimiter.isRateLimited(`gh-api-${repository.userId}`, 4000, 3600000);
-            if (!isLimited) {
-                const { Octokit } = await eval('import("octokit")');
-                octokit = new Octokit({ auth: this.crypto.decrypt(repository.user.accessToken) });
+        for (const repository of repositories) {
+            let octokit;
+            if (repository.user?.accessToken) {
+                const isLimited = await this.rateLimiter.isRateLimited(`gh-api-${repository.userId}`, 4000, 3600000);
+                if (!isLimited) {
+                    const { Octokit } = await eval('import("octokit")');
+                    octokit = new Octokit({ auth: this.crypto.decrypt(repository.user.accessToken) });
+                }
             }
-        }
 
-        const [owner, repoName] = repository.fullName.split('/');
+            const [owner, repoName] = repository.fullName.split('/');
 
-        for (const commit of commits) {
-            let additions = 0;
-            let deletions = 0;
-            let filesChanged = (commit.added?.length ?? 0) + (commit.removed?.length ?? 0) + (commit.modified?.length ?? 0);
+            for (const commit of commits) {
+                let additions = 0;
+                let deletions = 0;
+                let filesChanged = (commit.added?.length ?? 0) + (commit.removed?.length ?? 0) + (commit.modified?.length ?? 0);
 
-            if (octokit) {
-                const isDetailLimited = await this.rateLimiter.isRateLimited(`gh-api-${repository.userId}`, 4000, 3600000);
-                if (!isDetailLimited) {
-                    try {
-                        const { data: detail } = await octokit.rest.repos.getCommit({
-                            owner,
-                            repo: repoName,
-                            ref: commit.id
-                        });
-                        if (detail.stats) {
-                            additions = detail.stats.additions ?? 0;
-                            deletions = detail.stats.deletions ?? 0;
-                            filesChanged = detail.files?.length ?? filesChanged;
+                if (octokit) {
+                    const isDetailLimited = await this.rateLimiter.isRateLimited(`gh-api-${repository.userId}`, 4000, 3600000);
+                    if (!isDetailLimited) {
+                        try {
+                            const { data: detail } = await octokit.rest.repos.getCommit({
+                                owner,
+                                repo: repoName,
+                                ref: commit.id
+                            });
+                            if (detail.stats) {
+                                additions = detail.stats.additions ?? 0;
+                                deletions = detail.stats.deletions ?? 0;
+                                filesChanged = detail.files?.length ?? filesChanged;
+                            }
+                        } catch (e) {
+                            this.logger.warn(`Could not fetch details for webhook commit ${commit.id}`);
                         }
-                    } catch (e) {
-                        this.logger.warn(`Could not fetch details for webhook commit ${commit.id}`);
                     }
                 }
-            }
 
-            await this.prisma.commit.upsert({
-                where: {
-                    sha_repositoryId: { sha: commit.id, repositoryId: repository.id }
-                },
-                update: {
-                    message: commit.message,
-                    additions,
-                    deletions,
-                    filesChanged
-                },
-                create: {
-                    sha: commit.id,
-                    repositoryId: repository.id,
-                    userId: repository.userId,
-                    message: commit.message,
-                    additions,
-                    deletions,
-                    filesChanged,
-                    committedAt: new Date(commit.timestamp),
-                }
-            });
+                await this.prisma.commit.upsert({
+                    where: {
+                        sha_repositoryId: { sha: commit.id, repositoryId: repository.id }
+                    },
+                    update: {
+                        message: commit.message,
+                        additions,
+                        deletions,
+                        filesChanged
+                    },
+                    create: {
+                        sha: commit.id,
+                        repositoryId: repository.id,
+                        userId: repository.userId,
+                        message: commit.message,
+                        additions,
+                        deletions,
+                        filesChanged,
+                        committedAt: new Date(commit.timestamp),
+                    }
+                });
+            }
         }
+
         return { status: 'success' };
     }
+
     private async handleWebhookPR(job: Job) {
         const { repositoryId: githubRepoId, pullRequest } = job.data;
 
-const repository = await this.prisma.repository.findUnique({
-    where: { githubId: githubRepoId },
-    include: { user: true }
-});
+        const repositories = await this.prisma.repository.findMany({
+            where: { githubId: githubRepoId },
+            include: { user: true }
+        });
 
-if (!repository) {
-    this.logger.warn(`Webhook PR omitido: Repositorio ${githubRepoId} no encontrado en DB.`);
-    return { status: 'ignored' };
-}
+        if (repositories.length === 0) {
+            this.logger.warn(`Webhook PR omitido: Repositorio ${githubRepoId} no encontrado en DB para ningún usuario.`);
+            return { status: 'ignored' };
+        }
 
-// Only allow PRs if the author login matches the local user login
-if (pullRequest.user?.login !== repository.user?.login) {
-    this.logger.log(`Webhook PR omitido: Autor ${pullRequest.user?.login} no coincide con el usuario del dashboard (${repository.user?.login}).`);
-    return { status: 'skipped_not_author' };
-}
+        for (const repository of repositories) {
+            // Only allow PRs if the author login matches the local user login
+            if (pullRequest.user?.login?.toLowerCase() !== repository.user?.login?.toLowerCase()) {
+                this.logger.log(`Webhook PR omitido para usuario ${repository.user?.login}: Autor ${pullRequest.user?.login} no coincide.`);
+                continue;
+            }
 
-await this.prisma.pullRequest.upsert({
-    where: {
-        githubId_repositoryId: { githubId: pullRequest.id, repositoryId: repository.id }
-    },
-    update: {
-        title: pullRequest.title,
-        state: pullRequest.state,
-        isDraft: pullRequest.draft,
-        additions: pullRequest.additions,
-        deletions: pullRequest.deletions,
-        changedFiles: pullRequest.changed_files,
-        commits: pullRequest.commits,
-        comments: pullRequest.comments,
-        reviewComments: pullRequest.review_comments,
-        mergedAt: pullRequest.merged_at ? new Date(pullRequest.merged_at) : null,
-        closedAt: pullRequest.closed_at ? new Date(pullRequest.closed_at) : null,
-        updatedAt: new Date(),
-    },
-    create: {
-        githubId: pullRequest.id,
-        repositoryId: repository.id,
-        userId: repository.userId,
-        number: pullRequest.number,
-        title: pullRequest.title,
-        state: pullRequest.state,
-        isDraft: pullRequest.draft,
-        additions: pullRequest.additions || 0,
-        deletions: pullRequest.deletions || 0,
-        changedFiles: pullRequest.changed_files || 0,
-        commits: pullRequest.commits || 0,
-        comments: pullRequest.comments || 0,
-        reviewComments: pullRequest.review_comments || 0,
-        mergedAt: pullRequest.merged_at ? new Date(pullRequest.merged_at) : null,
-        closedAt: pullRequest.closed_at ? new Date(pullRequest.closed_at) : null,
-    }
-});
+            await this.prisma.pullRequest.upsert({
+                where: {
+                    githubId_repositoryId: { githubId: pullRequest.id, repositoryId: repository.id }
+                },
+                update: {
+                    title: pullRequest.title,
+                    state: pullRequest.state,
+                    isDraft: pullRequest.draft,
+                    additions: pullRequest.additions,
+                    deletions: pullRequest.deletions,
+                    changedFiles: pullRequest.changed_files,
+                    commits: pullRequest.commits,
+                    comments: pullRequest.comments,
+                    reviewComments: pullRequest.review_comments,
+                    mergedAt: pullRequest.merged_at ? new Date(pullRequest.merged_at) : null,
+                    closedAt: pullRequest.closed_at ? new Date(pullRequest.closed_at) : null,
+                    updatedAt: new Date(),
+                },
+                create: {
+                    githubId: pullRequest.id,
+                    repositoryId: repository.id,
+                    userId: repository.userId,
+                    number: pullRequest.number,
+                    title: pullRequest.title,
+                    state: pullRequest.state,
+                    isDraft: pullRequest.draft,
+                    additions: pullRequest.additions || 0,
+                    deletions: pullRequest.deletions || 0,
+                    changedFiles: pullRequest.changed_files || 0,
+                    commits: pullRequest.commits || 0,
+                    comments: pullRequest.comments || 0,
+                    reviewComments: pullRequest.review_comments || 0,
+                    mergedAt: pullRequest.merged_at ? new Date(pullRequest.merged_at) : null,
+                    closedAt: pullRequest.closed_at ? new Date(pullRequest.closed_at) : null,
+                }
+            });
+        }
 
-return { status: 'success' };
+        return { status: 'success' };
     }
 }

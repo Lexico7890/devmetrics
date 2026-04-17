@@ -63,7 +63,7 @@ model Session {
 
 model Repository {
   id              String    @id @default(cuid())
-  githubId        Int       @unique @map("github_id")
+  githubId        Int       @map("github_id")
   userId          String    @map("user_id")
   name            String
   fullName        String    @map("full_name")
@@ -83,6 +83,7 @@ model Repository {
   commits      Commit[]
   pullRequests PullRequest[]
 
+  @@unique([userId, githubId])
   @@unique([userId, fullName])
   @@index([userId, isActive])
   @@map("repositories")
