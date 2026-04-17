@@ -46,7 +46,8 @@ export function calculateTimeToMerge(createdAt: Date | string, mergedAt: Date | 
     return `${days}d ${remainingHours}h`;
   }
   if (hours > 0) {
-    return `${hours}.${Math.floor(minutes / 6)}h`;
+    const minutesPart = minutes >= 30 ? '.5' : '';
+    return `${hours}${minutesPart}h`;
   }
   return `${minutes}m`;
 }
@@ -77,8 +78,8 @@ export function formatTimeAgo(date: Date | string): string {
 export function calculatePrSize(additions: number, deletions: number): 'XS' | 'S' | 'M' | 'L' {
   const totalChanges = additions + deletions;
   if (totalChanges < 10) return 'XS';
-  if (totalChanges > 100) return 'M';
   if (totalChanges > 500) return 'L';
+  if (totalChanges > 100) return 'M';
   return 'S';
 }
 

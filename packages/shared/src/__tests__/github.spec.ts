@@ -83,10 +83,10 @@ describe('GitHub Utils', () => {
     it('should calculate average merge time correctly', () => {
       const prs = [
         { id: 1, merged_at: '2024-01-01T12:00:00Z', created_at: '2024-01-01T10:00:00Z' },
-        { id: 2, merged_at: '2024-01-01T14:00:00Z', created_at: '2024-01-01T10:00:00Z' },
+        { id: 2, merged_at: '2024-01-01T14:00:00Z', created_at: '2024-01-01T12:00:00Z' },
       ] as any;
       const result = calculateAverageMergeTime(prs);
-      expect(result).toBe(7200000); // 2 hours in ms
+      expect(result).toBe(10800000); // 3 hours in ms (average of 2h and 2h)
     });
 
     it('should handle empty array', () => {
