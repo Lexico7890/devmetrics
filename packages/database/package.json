@@ -9,7 +9,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:migrate:custom": "tsx scripts/custom-migrate.ts",
-    "db:push": "prisma db push",
+    "db:push": "prisma db push --accept-data-loss",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "clean": "rm -rf dist node_modules/.prisma"

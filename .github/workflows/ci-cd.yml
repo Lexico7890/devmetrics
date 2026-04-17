@@ -76,4 +76,4 @@ jobs:
             # 5. Sincronizar Prisma (asegurarnos de que la BD tiene las columnas correctas)
             echo "Waiting for containers to initialize before DB push..."
             sleep 10
-            docker exec -i devmetrics-sync sh -c "cd packages/database && npx prisma db push"
+            docker exec -i devmetrics-sync sh -c "cd packages/database && npx prisma db push --accept-data-loss"
