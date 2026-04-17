@@ -46,23 +46,29 @@ export class AnalyticsService {
 
     const commitFilter = {
       userId,
-      message: {
-        not: {
-          startsWith: 'Merge ',
-        },
-      },
+      AND: [
+        { message: { not: { startsWith: 'Merge ' } } },
+        { message: { not: { startsWith: 'Merge branch' } } },
+        { message: { not: { startsWith: 'Merge pull request' } } },
+        { message: { not: { startsWith: 'merge ' } } },
+      ],
     };
 
-    const commitsCurrentPeriod = await this.prisma.commit.count({
+    // --- Deduplicated Counts using GroupBy SHA ---
+    const commitsCurrentPeriodRaw = await this.prisma.commit.groupBy({
+      by: ['sha'],
       where: { ...commitFilter, committedAt: { gte: thirtyDaysAgo } },
     });
+    const commitsCurrentPeriod = commitsCurrentPeriodRaw.length;
 
-    const commitsPreviousPeriod = await this.prisma.commit.count({
+    const commitsPreviousPeriodRaw = await this.prisma.commit.groupBy({
+      by: ['sha'],
       where: {
         ...commitFilter,
         committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
       },
     });
+    const commitsPreviousPeriod = commitsPreviousPeriodRaw.length;
 
     const commitChangePercent =
       commitsPreviousPeriod === 0
@@ -84,23 +90,51 @@ export class AnalyticsService {
         ? 100
         : ((prsCurrentPeriod - prsPreviousPeriod) / prsPreviousPeriod) * 100;
 
-    const changesAgg = await this.prisma.commit.aggregate({
+    // --- Deduplicated Lines Aggregate ---
+    const commitDetailsCurrent = await this.prisma.commit.findMany({
       where: { ...commitFilter, committedAt: { gte: thirtyDaysAgo } },
-      _sum: { additions: true, deletions: true },
+      select: { sha: true, additions: true, deletions: true },
     });
-    const changesPrevAgg = await this.prisma.commit.aggregate({
+
+    // Deduplicate in memory for sum (since groupBy doesn't allow sum over the groups easily in one call without Raw SQL)
+    const uniqueCommitsMapCurrent = new Map<string, { a: number, d: number }>();
+    commitDetailsCurrent.forEach(c => {
+      if (!uniqueCommitsMapCurrent.has(c.sha)) {
+        uniqueCommitsMapCurrent.set(c.sha, { a: c.additions, d: c.deletions });
+      }
+    });
+
+    let totalAdditionsCurrent = 0;
+    let totalDeletionsCurrent = 0;
+    uniqueCommitsMapCurrent.forEach(val => {
+      totalAdditionsCurrent += val.a;
+      totalDeletionsCurrent += val.d;
+    });
+
+    const commitDetailsPrev = await this.prisma.commit.findMany({
       where: {
         ...commitFilter,
         committedAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
       },
-      _sum: { additions: true, deletions: true },
+      select: { sha: true, additions: true, deletions: true },
     });
 
-    const totalLinesCurrent =
-      (changesAgg._sum.additions || 0) + (changesAgg._sum.deletions || 0);
-    const totalLinesPrev =
-      (changesPrevAgg._sum.additions || 0) +
-      (changesPrevAgg._sum.deletions || 0);
+    const uniqueCommitsMapPrev = new Map<string, { a: number, d: number }>();
+    commitDetailsPrev.forEach(c => {
+      if (!uniqueCommitsMapPrev.has(c.sha)) {
+        uniqueCommitsMapPrev.set(c.sha, { a: c.additions, d: c.deletions });
+      }
+    });
+
+    let totalAdditionsPrev = 0;
+    let totalDeletionsPrev = 0;
+    uniqueCommitsMapPrev.forEach(val => {
+      totalAdditionsPrev += val.a;
+      totalDeletionsPrev += val.d;
+    });
+
+    const totalLinesCurrent = totalAdditionsCurrent + totalDeletionsCurrent;
+    const totalLinesPrev = totalAdditionsPrev + totalDeletionsPrev;
 
     const linesChangePercent =
       totalLinesPrev === 0
@@ -113,7 +147,8 @@ export class AnalyticsService {
       const start = startOfDay(date);
       const end = endOfDay(date);
 
-      const countMain = await this.prisma.commit.count({
+      const countRaw = await this.prisma.commit.groupBy({
+        by: ['sha'],
         where: {
           ...commitFilter,
           committedAt: { gte: start, lte: end },
@@ -122,18 +157,22 @@ export class AnalyticsService {
 
       commitsTimeline.push({
         name: format(date, 'MMM dd'),
-        commits: countMain,
+        commits: countRaw.length,
       });
     }
 
     const commitsForActive = await this.prisma.commit.findMany({
       where: { ...commitFilter, committedAt: { gte: thirtyDaysAgo } },
-      select: { committedAt: true },
+      select: { sha: true, committedAt: true },
     });
 
-    const uniqueDays = new Set(
-      commitsForActive.map((c) => format(c.committedAt, 'yyyy-MM-dd')),
-    );
+    // Deduplicate by SHA first for active days calculation
+    const shaDateMap = new Map<string, string>();
+    commitsForActive.forEach(c => {
+        shaDateMap.set(c.sha, format(c.committedAt, 'yyyy-MM-dd'));
+    });
+
+    const uniqueDays = new Set(shaDateMap.values());
     const activeDaysCount = uniqueDays.size;
 
     let pbUpdated = false;
@@ -219,8 +258,8 @@ export class AnalyticsService {
       },
       update: {
         totalCommits: commitsCurrentPeriod,
-        totalAdditions: changesAgg._sum.additions || 0,
-        totalDeletions: changesAgg._sum.deletions || 0,
+        totalAdditions: totalAdditionsCurrent,
+        totalDeletions: totalDeletionsCurrent,
         totalPrsMerged,
         totalPrsOpened,
         languages: JSON.stringify(
@@ -234,8 +273,8 @@ export class AnalyticsService {
         userId,
         date: startOfDay(today),
         totalCommits: commitsCurrentPeriod,
-        totalAdditions: changesAgg._sum.additions || 0,
-        totalDeletions: changesAgg._sum.deletions || 0,
+        totalAdditions: totalAdditionsCurrent,
+        totalDeletions: totalDeletionsCurrent,
         totalPrsMerged,
         totalPrsOpened,
         languages: JSON.stringify(
@@ -271,7 +310,7 @@ export class AnalyticsService {
               : totalLinesCurrent.toString(),
           change: `${linesChangePercent > 0 ? '+' : ''}${linesChangePercent.toFixed(1)}%`,
           trend: linesChangePercent >= 0 ? 'up' : 'down',
-          subtext: `+${(changesAgg._sum.additions || 0) >= 1000 ? ((changesAgg._sum.additions || 0) / 1000).toFixed(1) + 'k' : (changesAgg._sum.additions || 0)} lines added`,
+          subtext: `+${totalAdditionsCurrent >= 1000 ? (totalAdditionsCurrent / 1000).toFixed(1) + 'k' : totalAdditionsCurrent} lines added`,
           personalBest: personalBests.lines || 0,
         },
         activeDays: {
@@ -464,18 +503,29 @@ export class AnalyticsService {
   }
 
   private async seedHistoricalPersonalBests(userId: string): Promise<Record<string, number>> {
-    const allCommits = await this.prisma.commit.findMany({
-      where: { 
-        userId, 
-        message: {
-          not: {
-            startsWith: 'Merge ',
-          },
-        },
-      },
-      select: { committedAt: true, additions: true, deletions: true },
+    const commitFilter = {
+      userId,
+      AND: [
+        { message: { not: { startsWith: 'Merge ' } } },
+        { message: { not: { startsWith: 'Merge branch' } } },
+        { message: { not: { startsWith: 'Merge pull request' } } },
+        { message: { not: { startsWith: 'merge ' } } },
+      ],
+    };
+
+    const allCommitsRaw = await this.prisma.commit.findMany({
+      where: commitFilter,
+      select: { sha: true, committedAt: true, additions: true, deletions: true },
       orderBy: { committedAt: 'asc' },
     });
+
+    // Deduplicate SHAs while keeping the first occurrence (since they are ordered by date)
+    const shaMap = new Map<string, typeof allCommitsRaw[0]>();
+    allCommitsRaw.forEach(c => {
+        if (!shaMap.has(c.sha)) shaMap.set(c.sha, c);
+    });
+    const allCommits = Array.from(shaMap.values());
+
 
     let maxCommits = 0;
     let maxLines = 0;
