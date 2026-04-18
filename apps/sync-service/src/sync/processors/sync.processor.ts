@@ -149,6 +149,15 @@ export class SyncProcessor extends WorkerHost {
         });
 
         for (const commitData of commits) {
+            // --- STRICT AUTHORSHIP CHECK ---
+            // Even if we filtered by 'author' in the API, we double-check here to ensure
+            // GitHub didn't return false positives (e.g. from same email or signed commits).
+            const authorLogin = commitData.author?.login || commitData.commit?.author?.name;
+            if (authorLogin?.toLowerCase() !== user.login.toLowerCase()) {
+                this.logger.debug(`Skipping commit ${commitData.sha} for user ${user.login}: Author ${authorLogin} does not match.`);
+                continue;
+            }
+
             let additions = 0;
             let deletions = 0;
             let filesChanged = 0;
@@ -287,6 +296,15 @@ export class SyncProcessor extends WorkerHost {
             const [owner, repoName] = repository.fullName.split('/');
 
             for (const commit of commits) {
+                // --- STRICT AUTHORSHIP CHECK FOR WEBHOOKS ---
+                // Commits from webhooks have author.username or author.email
+                const commitAuthor = commit.author?.username || commit.author?.name || commit.committer?.username;
+                
+                if (commitAuthor?.toLowerCase() !== repository.user?.login?.toLowerCase()) {
+                    this.logger.debug(`Webhook Commit ignorado para ${repository.user?.login}: El autor ${commitAuthor} no coincide.`);
+                    continue;
+                }
+
                 let additions = 0;
                 let deletions = 0;
                 let filesChanged = (commit.added?.length ?? 0) + (commit.removed?.length ?? 0) + (commit.modified?.length ?? 0);
