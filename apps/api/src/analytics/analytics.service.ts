@@ -354,6 +354,7 @@ export class AnalyticsService {
       cursor?: string;
       limit?: number;
       state?: string;
+      repositoryId?: string;
     },
   ) {
     const { cursor, limit = 10, state } = options;
@@ -361,6 +362,9 @@ export class AnalyticsService {
     const where: any = { userId };
     if (state && state !== 'All') {
       where.state = state.toLowerCase();
+    }
+    if (options.repositoryId) {
+      where.repositoryId = options.repositoryId;
     }
 
     const [prs, total] = await Promise.all([
@@ -432,6 +436,115 @@ export class AnalyticsService {
         startCount: cursor ? undefined : 1,
         endCount: Math.min(limit, items.length),
       },
+    };
+  }
+
+  async getUserRepositories(userId: string) {
+    return this.prisma.repository.findMany({
+      where: { userId },
+      select: { id: true, name: true, fullName: true },
+      orderBy: { name: 'asc' }
+    });
+  }
+
+  async getPRSummary(userId: string, options: { repositoryId?: string; days?: number }) {
+    const { repositoryId, days = 30 } = options;
+    const startDate = subDays(new Date(), days);
+    const prevStartDate = subDays(startDate, days);
+
+    const where: any = {
+      userId,
+      createdAt: { gte: startDate }
+    };
+    if (repositoryId) where.repositoryId = repositoryId;
+
+    const prevWhere: any = {
+      userId,
+      createdAt: { gte: prevStartDate, lt: startDate }
+    };
+    if (repositoryId) prevWhere.repositoryId = repositoryId;
+
+    const [currentPrs, prevPrs] = await Promise.all([
+      this.prisma.pullRequest.findMany({ where }),
+      this.prisma.pullRequest.findMany({ where: prevWhere })
+    ]);
+
+    const calculateMetrics = (prsArray: any[]) => {
+      const mergedPrs = prsArray.filter(p => !!p.mergedAt);
+      const closedPrs = prsArray.filter(p => p.state === 'closed');
+      
+      // Velocity (Avg Time to Merge)
+      let totalMergeTimeMs = 0;
+      mergedPrs.forEach(p => {
+        if (p.mergedAt && p.createdAt) {
+          totalMergeTimeMs += p.mergedAt.getTime() - p.createdAt.getTime();
+        }
+      });
+      const avgMergeTimeHours = mergedPrs.length > 0 
+        ? (totalMergeTimeMs / (1000 * 60 * 60)) / mergedPrs.length 
+        : 0;
+
+      // Success Rate
+      const successRate = closedPrs.length > 0 
+        ? (mergedPrs.length / closedPrs.length) * 100 
+        : 0;
+
+      // Review Participation
+      const reviewedPrs = prsArray.filter(p => p.reviewComments > 0);
+      const reviewRate = prsArray.length > 0 
+        ? (reviewedPrs.length / prsArray.length) * 100 
+        : 0;
+
+      // Size Distribution
+      const distribution = { small: 0, medium: 0, large: 0 };
+      prsArray.forEach(p => {
+        const changes = (p.additions || 0) + (p.deletions || 0);
+        if (changes < 100) distribution.small++;
+        else if (changes <= 500) distribution.medium++;
+        else distribution.large++;
+      });
+
+      return {
+        avgMergeTimeHours,
+        successRate,
+        reviewRate,
+        distribution,
+        total: prsArray.length,
+        mergedCount: mergedPrs.length
+      };
+    };
+
+    const current = calculateMetrics(currentPrs);
+    const prev = calculateMetrics(prevPrs);
+
+    const getPercentChange = (curr: number, previous: number) => {
+      if (previous === 0) return curr > 0 ? 100 : 0;
+      return ((curr - previous) / previous) * 100;
+    };
+
+    return {
+      velocity: {
+        value: `${current.avgMergeTimeHours.toFixed(1)}h`,
+        change: `${getPercentChange(current.avgMergeTimeHours, prev.avgMergeTimeHours).toFixed(1)}%`,
+        trend: current.avgMergeTimeHours <= prev.avgMergeTimeHours ? 'up' : 'down' // up is better for time
+      },
+      successRate: {
+        value: `${current.successRate.toFixed(1)}%`,
+        change: `${getPercentChange(current.successRate, prev.successRate).toFixed(1)}%`,
+        trend: current.successRate >= prev.successRate ? 'up' : 'down'
+      },
+      participation: {
+        value: `${current.reviewRate.toFixed(1)}%`,
+        change: `${getPercentChange(current.reviewRate, prev.reviewRate).toFixed(1)}%`,
+        trend: current.reviewRate >= prev.reviewRate ? 'up' : 'down'
+      },
+      distribution: [
+        { name: 'Small', value: current.distribution.small, color: '#10b981' },
+        { name: 'Medium', value: current.distribution.medium, color: '#3b82f6' },
+        { name: 'Large', value: current.distribution.large, color: '#f59e0b' }
+      ],
+      totalPrs: current.total,
+      mergedPrs: current.mergedCount
     };
   }
 
