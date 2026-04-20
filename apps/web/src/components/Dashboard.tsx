@@ -35,6 +35,7 @@ const Dashboard: React.FC = () => {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const isSyncingRef = React.useRef(false);
+  const dataVersionRef = React.useRef<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -69,6 +70,14 @@ const Dashboard: React.FC = () => {
         if (res.ok) {
           const data = await res.json();
           setIsSyncing(data.isSyncing);
+
+          // Detect new data version (fingerprint change)
+          // We trigger refresh if the version changed and a sync isn't currently active
+          if (dataVersionRef.current && data.dataVersion !== dataVersionRef.current && !data.isSyncing) {
+            setRefreshKey(prev => prev + 1);
+            console.log("Real-time update: Dashboard data refreshed due to new activity.");
+          }
+          dataVersionRef.current = data.dataVersion;
 
           if (isSyncingRef.current && !data.isSyncing) {
             setRefreshKey(prev => prev + 1);
