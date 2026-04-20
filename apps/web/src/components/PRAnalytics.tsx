@@ -187,7 +187,7 @@ const PRAnalytics: React.FC = () => {
       )}
 
       <div className="bg-card-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-        <div className="px-6 py-5 border-b border-border-dark flex items-center justify-between bg-white/[0.02]">
+        <div className="px-6 py-5 border-b border-border-dark flex items-center justify-between bg-white/2">
           <div>
             <h3 className="font-bold text-lg text-white">Recent Activity</h3>
             <p className="text-slate-500 text-xs mt-0.5">Real-time status of latest submissions</p>
@@ -271,7 +271,7 @@ const PRStatCard: React.FC<{ icon: React.ReactNode; label: string; value: string
 const PRRow: React.FC<{ title: string; refNo: string; time: string; author: string; authorImg: string; status: string; velocity?: string; additions: number; deletions: number }> = ({
   title, refNo, time, author, authorImg, status, velocity, additions, deletions
 }) => (
-  <tr className="hover:bg-white/[0.03] transition-colors group">
+  <tr className="hover:bg-white/3 transition-colors group">
     <td className="px-6 py-5">
       <div className="flex flex-col">
         <span className="font-semibold text-sm text-slate-200 group-hover:text-primary transition-colors cursor-pointer line-clamp-1">{title}</span>
