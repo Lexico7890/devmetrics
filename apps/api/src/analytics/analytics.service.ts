@@ -19,9 +19,27 @@ export class AnalyticsService {
       orderBy: { createdAt: 'desc' },
     });
 
+    // --- DATA VERSIONING (Fingerprinting) ---
+    // Fetch latest activity to detect updates without full page reloads
+    const [latestCommit, latestPR] = await Promise.all([
+      this.prisma.commit.findFirst({
+        where: { userId },
+        orderBy: { committedAt: 'desc' },
+        select: { committedAt: true }
+      }),
+      this.prisma.pullRequest.findFirst({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        select: { updatedAt: true }
+      })
+    ]);
+
+    const dataVersion = `${latestCommit?.committedAt?.getTime() || 0}-${latestPR?.updatedAt?.getTime() || 0}`;
+
     return {
       isSyncing: !!activeJob,
       jobType: activeJob?.jobType || null,
+      dataVersion,
     };
   }
 
