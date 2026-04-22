@@ -329,7 +329,7 @@ export class SyncProcessor extends WorkerHost {
                     }
                 }
 
-                await this.prisma.commit.upsert({
+                const savedCommit = await this.prisma.commit.upsert({
                     where: {
                         sha_repositoryId: { sha: commit.id, repositoryId: repository.id }
                     },
@@ -350,6 +350,36 @@ export class SyncProcessor extends WorkerHost {
                         committedAt: new Date(commit.timestamp),
                     }
                 });
+
+                // 2. Guardar archivos modificados
+                if (commit.added || commit.modified || commit.removed) {
+                    const files = [
+                        ...(commit.added || []).map((f: string) => ({ path: f, status: 'added' })),
+                        ...(commit.modified || []).map((f: string) => ({ path: f, status: 'modified' })),
+                        ...(commit.removed || []).map((f: string) => ({ path: f, status: 'removed' }))
+                    ];
+
+                    for (const file of files) {
+                        await this.prisma.commitFile.upsert({
+                            where: {
+                                commitId_filePath: {
+                                    commitId: savedCommit.id,
+                                    filePath: file.path
+                                }
+                            },
+                            update: {
+                                status: file.status
+                            },
+                            create: {
+                                commitId: savedCommit.id,
+                                filePath: file.path,
+                                additions: 0,
+                                deletions: 0,
+                                status: file.status
+                            }
+                        });
+                    }
+                }
             }
         }
 

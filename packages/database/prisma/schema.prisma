@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["auth", "analytics", "jobs"]
+  schemas  = ["auth", "analytics", "jobs", "ml"]
 }
 
 // ==========================================
@@ -28,7 +28,7 @@ model User {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  personalBests  Json      @default("{\"commits\":0,\"prs\":0,\"lines\":0,\"activeDays\":0}") @map("personal_bests") @db.JsonB
+  personalBests Json @default("{\"commits\":0,\"prs\":0,\"lines\":0,\"activeDays\":0}") @map("personal_bests") @db.JsonB
 
   repositories Repository[]
   commits      Commit[]
@@ -102,8 +102,9 @@ model Commit {
   committedAt  DateTime @map("committed_at")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository  Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commitFiles CommitFile[]
 
   @@unique([sha, repositoryId])
   @@index([userId, committedAt(sort: Desc)])
@@ -165,6 +166,22 @@ model DailyMetric {
   @@schema("analytics")
 }
 
+model CommitFile {
+  id        String @id @default(cuid())
+  commitId  String @map("commit_id")
+  filePath  String @map("file_path")
+  additions Int
+  deletions Int
+  status    String // 'added', 'modified', 'removed', 'renamed'
+
+  commit Commit @relation(fields: [commitId], references: [id], onDelete: Cascade)
+
+  @@unique([commitId, filePath])
+  @@index([filePath])
+  @@map("commit_files")
+  @@schema("analytics")
+}
+
 // ==========================================
 // JOBS SCHEMA — Background job tracking
 // ==========================================
@@ -211,4 +228,186 @@ model WebhookDelivery {
   @@index([event, status])
   @@map("webhook_deliveries")
   @@schema("jobs")
+}
+
+// ==========================================
+// ML SCHEMA — Feature Store & Model Registry
+// ==========================================
+
+// 📁 Tabla 1: Métricas a nivel de ARCHIVO (granularidad fina)
+model FileMetrics {
+  id           String @id @default(cuid())
+  repositoryId String @map("repository_id")
+  filePath     String @map("file_path")
+
+  // Ventana temporal
+  windowStart DateTime @map("window_start") @db.Date
+  windowEnd   DateTime @map("window_end") @db.Date
+
+  // 📊 Features básicas de actividad
+  totalCommits      Int   @map("total_commits")
+  uniqueAuthors     Int   @map("unique_authors")
+  avgAdditions      Float @map("avg_additions")
+  avgDeletions      Float @map("avg_deletions")
+  totalLinesChanged Int   @map("total_lines_changed")
+
+  // 🐛 Features de bugs/calidad
+  bugfixCount    Int @map("bugfix_count")
+  rollbackCount  Int @map("rollback_count")
+  urgentFixCount Int @map("urgent_fix_count") // Commits fuera de horario
+
+  // ⏱️ Features temporales
+  avgHourOfDay       Float @map("avg_hour_of_day")
+  weekendCommits     Int   @map("weekend_commits")
+  timeBetweenChanges Float @map("time_between_changes") // Horas promedio
+
+  // 🔄 Features de proceso
+  avgReviewComments Float @map("avg_review_comments")
+  avgTimeToMerge    Float @map("avg_time_to_merge") // Horas
+  directPushes      Int   @map("direct_pushes") // Sin PR
+
+  // 🎯 Label (para entrenamiento supervisado)
+  wasRefactored    Boolean @default(false) @map("was_refactored")
+  refactorSeverity Float?  @map("refactor_severity") // 0-1, % líneas cambiadas
+
+  // Metadata
+  calculatedAt     DateTime @default(now()) @map("calculated_at")
+  dataQualityScore Float?   @map("data_quality_score") // 0-1
+
+  @@unique([repositoryId, filePath, windowStart, windowEnd])
+  @@index([repositoryId, filePath])
+  @@index([windowEnd])
+  @@map("file_metrics")
+  @@schema("ml")
+}
+
+// 📊 Tabla 2: Features agregados a nivel repositorio
+model RepoMetrics {
+  id           String @id @default(cuid())
+  repositoryId String @map("repository_id")
+
+  windowStart DateTime @map("window_start") @db.Date
+  windowEnd   DateTime @map("window_end") @db.Date
+
+  // Métricas de hotspots
+  topHotspotCount  Int   @map("top_hotspot_count") // Archivos en top 10% cambios
+  hotspotChurnRate Float @map("hotspot_churn_rate") // Rotación en hotspots
+
+  // Métricas de equipo
+  busFactor        Float @map("bus_factor") // Concentración de conocimiento
+  reviewDepthScore Float @map("review_depth_score") // Calidad de revisiones
+  contextSwitches  Float @map("context_switches") // Cambios entre repos/día
+
+  // Tendencias
+  velocityTrend     Float @map("velocity_trend") // Commits/semana (cambio %)
+  bugToFeatureRatio Float @map("bug_to_feature_ratio")
+
+  // Score agregado
+  overallDebtScore Float? @map("overall_debt_score") // Calculado por modelo
+
+  calculatedAt DateTime @default(now()) @map("calculated_at")
+
+  @@unique([repositoryId, windowStart, windowEnd])
+  @@map("repo_metrics")
+  @@schema("ml")
+}
+
+// 🔄 Tabla 3: Registro de features en tiempo real (cache key)
+model FeatureSnapshot {
+  id         String @id @default(cuid())
+  entityType String @map("entity_type") // "file" o "repo"
+  entityId   String @map("entity_id") // filePath o repositoryId
+
+  // Features serializados (para serving rápido)
+  featuresJson Json @map("features_json") @db.JsonB
+
+  // Hash para detectar cambios
+  featuresHash String @map("features_hash")
+
+  // TTL metadata
+  validUntil DateTime @map("valid_until")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([entityType, entityId])
+  @@index([validUntil])
+  @@map("feature_snapshots")
+  @@schema("ml")
+}
+
+// 📈 Tabla 4: Data quality monitoring
+model DataQualityLog {
+  id        String @id @default(cuid())
+  checkName String @map("check_name")
+  tableName String @map("table_name")
+
+  passed  Boolean
+  details Json    @db.JsonB
+
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  @@index([checkName, checkedAt(sort: Desc)])
+  @@map("data_quality_logs")
+  @@schema("ml")
+}
+
+// Tabla para registrar modelos entrenados
+model ModelRegistry {
+  id           String @id @default(cuid())
+  modelName    String @map("model_name")
+  modelVersion String @map("model_version")
+
+  // Stage del modelo
+  stage String @default("experimental") // experimental, staging, production, archived
+
+  // Métricas
+  metrics    Json @map("metrics") @db.JsonB
+  parameters Json @map("parameters") @db.JsonB
+
+  // Linaje
+  datasetHash String  @map("dataset_hash")
+  gitCommit   String  @map("git_commit")
+  mlflowRunId String? @map("mlflow_run_id")
+
+  // Artefactos
+  modelPath String @map("model_path")
+
+  // Metadata
+  deployedAt DateTime? @map("deployed_at")
+  createdBy  String?   @map("created_by")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@unique([modelName, modelVersion])
+  @@index([modelName, stage])
+  @@map("model_registry")
+  @@schema("ml")
+}
+
+// Tabla para guardar predicciones (monitoreo)
+model PredictionLog {
+  id             String @id @default(cuid())
+  modelVersionId String @map("model_version_id")
+
+  repositoryId String @map("repository_id")
+  filePath     String @map("file_path")
+
+  predictedScore Float   @map("predicted_score")
+  threshold      Float   @default(0.5)
+  prediction     Boolean
+
+  // Features usadas (para debug)
+  featuresSnapshot Json? @map("features_snapshot") @db.JsonB
+
+  // Feedback loop
+  actualOutcome Boolean?  @map("actual_outcome")
+  feedbackAt    DateTime? @map("feedback_at")
+
+  // Performance
+  latencyMs Int @map("latency_ms")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([modelVersionId, createdAt(sort: Desc)])
+  @@index([repositoryId, filePath])
+  @@map("prediction_logs")
+  @@schema("ml")
 }
