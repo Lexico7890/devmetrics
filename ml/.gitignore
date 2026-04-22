@@ -1,0 +1,45 @@
+# Datos
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Modelos
+models/**/*.pkl
+models/**/*.joblib
+models/**/*.onnx
+!models/**/.gitkeep
+
+# MLflow
+experiments/mlflow.db
+experiments/artifacts/*
+!experiments/artifacts/.gitkeep
+
+# Python
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+notebooks/.ipynb_checkpoints/
+*.ipynb
+
+# Environment
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
