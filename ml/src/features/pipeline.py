@@ -8,7 +8,6 @@ import json
 from typing import Dict, List, Tuple
 import sys
 sys.path.append('..')
-from utils.redis_cache import FeatureCache
 from features.validation import DataValidator
 from utils.db import DatabaseConnector
 
@@ -122,13 +121,6 @@ class DebtFeaturePipeline:
         # 2. Guardar en PostgreSQL
         print(f"💾 Guardando {len(features_df)} registros en ml.file_metrics...")
         self.db.save_file_metrics(features_df, repository_id)
-        cache = FeatureCache()
-        for _, row in features_df.iterrows():
-            cache.set_features(
-                repository_id, 
-                row['file_path'],
-                json.loads(row.to_json())
-            )
         
         # 3. Calcular data quality
         quality_score = self._calculate_quality_score(features_df)

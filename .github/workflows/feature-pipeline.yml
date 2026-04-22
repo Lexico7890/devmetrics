@@ -30,7 +30,6 @@ jobs:
         env:
           # Inyectamos de los Secrets de GitHub las URLs a nuestra base en AWS
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-          REDIS_URL: ${{ secrets.PROD_REDIS_URL }}
         run: |
           # Si tienes un script que itere por todos los repos (ej. run_all.py), llámalo aquí.
           # Por ahora, demostración utilizando un repositorio específico por argumento o llamándolo desde python:
